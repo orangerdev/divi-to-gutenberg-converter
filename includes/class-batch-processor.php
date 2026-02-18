@@ -31,6 +31,27 @@ class DTG_Batch_Processor {
 	const CSS_BACKUP_META_KEY = '_dtg_wpb_custom_css_backup';
 
 	/**
+	 * Meta key for per-post CSS.
+	 *
+	 * @var string
+	 */
+	const CSS_META_KEY = '_dtg_custom_css';
+
+	/**
+	 * Meta key for per-post Google Fonts.
+	 *
+	 * @var string
+	 */
+	const FONTS_META_KEY = '_dtg_google_fonts';
+
+	/**
+	 * Upload sub-directory name.
+	 *
+	 * @var string
+	 */
+	const UPLOAD_DIR = 'dtg-converter';
+
+	/**
 	 * Gutenberg builder instance.
 	 *
 	 * @var DTG_Gutenberg_Builder
@@ -136,8 +157,11 @@ class DTG_Batch_Processor {
 			return [ 'error' => 'Post not found' ];
 		}
 
-		$original  = $post->post_content;
+		$original = $post->post_content;
+
+		$this->builder->set_post_id( $post_id );
 		$converted = $this->builder->convert( $original );
+		$css       = $this->builder->get_google_fonts_css() . $this->builder->get_collected_css();
 
 		return [
 			'post_id'    => $post_id,
@@ -145,6 +169,7 @@ class DTG_Batch_Processor {
 			'post_type'  => $post->post_type,
 			'original'   => $original,
 			'converted'  => $converted,
+			'css'        => $css,
 			'shortcodes' => $this->builder->analyze_shortcodes( $original ),
 		];
 	}
@@ -244,10 +269,22 @@ class DTG_Batch_Processor {
 			update_post_meta( $post->ID, self::CSS_BACKUP_META_KEY, $wpb_css );
 		}
 
-		// 3. Convert content.
+		// 3. Convert content with CSS collection.
+		$this->builder->set_post_id( $post->ID );
 		$converted = $this->builder->convert( $original );
 
-		// 4. Update post content.
+		// 4. Save collected CSS and Google Fonts to post meta.
+		$post_css = $this->builder->get_collected_css();
+		if ( ! empty( $post_css ) ) {
+			update_post_meta( $post->ID, self::CSS_META_KEY, $post_css );
+		}
+
+		$google_fonts = $this->builder->get_google_fonts();
+		if ( ! empty( $google_fonts ) ) {
+			update_post_meta( $post->ID, self::FONTS_META_KEY, $google_fonts );
+		}
+
+		// 5. Update post content.
 		$result = wp_update_post(
 			[
 				'ID'           => $post->ID,
@@ -266,16 +303,18 @@ class DTG_Batch_Processor {
 			);
 			delete_post_meta( $post->ID, self::BACKUP_META_KEY );
 			delete_post_meta( $post->ID, self::CSS_BACKUP_META_KEY );
+			delete_post_meta( $post->ID, self::CSS_META_KEY );
+			delete_post_meta( $post->ID, self::FONTS_META_KEY );
 
 			throw new Exception( 'Failed to update post: ' . $result->get_error_message() );
 		}
 
-		// 5. Clean up WPBakery meta.
+		// 6. Clean up WPBakery meta.
 		delete_post_meta( $post->ID, '_wpb_vc_js_status' );
 		delete_post_meta( $post->ID, '_wpb_shortcodes_custom_css' );
 		delete_post_meta( $post->ID, '_wpb_shortcodes_default_css' );
 
-		// 6. Mark as converted.
+		// 7. Mark as converted.
 		update_post_meta( $post->ID, self::CONVERTED_META_KEY, current_time( 'mysql' ) );
 	}
 
@@ -313,6 +352,8 @@ class DTG_Batch_Processor {
 		delete_post_meta( $post_id, self::BACKUP_META_KEY );
 		delete_post_meta( $post_id, self::CSS_BACKUP_META_KEY );
 		delete_post_meta( $post_id, self::CONVERTED_META_KEY );
+		delete_post_meta( $post_id, self::CSS_META_KEY );
+		delete_post_meta( $post_id, self::FONTS_META_KEY );
 
 		return true;
 	}
@@ -365,5 +406,138 @@ class DTG_Batch_Processor {
 			AND post_type IN ('post', 'page', 'product')
 			AND post_status IN ('publish', 'draft', 'private', 'pending')"
 		);
+	}
+
+	/**
+	 * Regenerate the aggregated CSS file from all converted posts.
+	 *
+	 * @return array Result with file path and size.
+	 */
+	public function regenerate_css_file() {
+		global $wpdb;
+
+		// Collect all per-post CSS.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$css_rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT pm.post_id, pm.meta_value
+				FROM {$wpdb->postmeta} pm
+				INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+				WHERE pm.meta_key = %s
+				AND p.post_status IN ('publish', 'draft', 'private', 'pending')
+				ORDER BY pm.post_id ASC",
+				self::CSS_META_KEY
+			)
+		);
+
+		// Collect all Google Fonts.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$font_rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s",
+				self::FONTS_META_KEY
+			)
+		);
+
+		$all_fonts = [];
+		if ( $font_rows ) {
+			foreach ( $font_rows as $row ) {
+				$fonts = maybe_unserialize( $row->meta_value );
+				if ( is_array( $fonts ) ) {
+					foreach ( $fonts as $family => $variants ) {
+						if ( ! isset( $all_fonts[ $family ] ) ) {
+							$all_fonts[ $family ] = [];
+						}
+						$all_fonts[ $family ] = array_unique( array_merge( $all_fonts[ $family ], (array) $variants ) );
+					}
+				}
+			}
+		}
+
+		// Build CSS file content.
+		$css = "/* DTG Converter - Auto-generated CSS */\n";
+		$css .= "/* Generated: " . current_time( 'mysql' ) . " */\n\n";
+
+		// Google Fonts @import.
+		if ( ! empty( $all_fonts ) ) {
+			$families = [];
+			foreach ( $all_fonts as $family => $variants ) {
+				$families[] = str_replace( ' ', '+', $family ) . ':' . implode( ',', $variants );
+			}
+			$css .= '@import url("https://fonts.googleapis.com/css?family=' . implode( '|', $families ) . '&display=swap");' . "\n\n";
+		}
+
+		// Per-post CSS.
+		if ( $css_rows ) {
+			foreach ( $css_rows as $row ) {
+				$css .= $row->meta_value . "\n";
+			}
+		}
+
+		// Write file.
+		$upload_dir = $this->get_upload_dir();
+		if ( ! $upload_dir ) {
+			return [
+				'success' => false,
+				'message' => 'Failed to create upload directory',
+			];
+		}
+
+		$file_path = $upload_dir . '/custom-styles.css';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		$written = file_put_contents( $file_path, $css );
+
+		if ( false === $written ) {
+			return [
+				'success' => false,
+				'message' => 'Failed to write CSS file',
+			];
+		}
+
+		// Store file version for cache busting.
+		update_option( 'dtg_css_version', time() );
+
+		return [
+			'success'   => true,
+			'file_path' => $file_path,
+			'file_size' => size_format( strlen( $css ) ),
+			'post_count' => $css_rows ? count( $css_rows ) : 0,
+		];
+	}
+
+	/**
+	 * Get the upload directory path, creating it if needed.
+	 *
+	 * @return string|false Directory path or false on failure.
+	 */
+	private function get_upload_dir() {
+		$upload = wp_upload_dir();
+		$dir    = $upload['basedir'] . '/' . self::UPLOAD_DIR;
+
+		if ( ! file_exists( $dir ) ) {
+			wp_mkdir_p( $dir );
+		}
+
+		if ( ! is_dir( $dir ) || ! is_writable( $dir ) ) {
+			return false;
+		}
+
+		return $dir;
+	}
+
+	/**
+	 * Get the URL to the generated CSS file.
+	 *
+	 * @return string|false CSS file URL or false if not generated.
+	 */
+	public static function get_css_file_url() {
+		$upload = wp_upload_dir();
+		$file   = $upload['basedir'] . '/' . self::UPLOAD_DIR . '/custom-styles.css';
+
+		if ( ! file_exists( $file ) ) {
+			return false;
+		}
+
+		return $upload['baseurl'] . '/' . self::UPLOAD_DIR . '/custom-styles.css';
 	}
 }

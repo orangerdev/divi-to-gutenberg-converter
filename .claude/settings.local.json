@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/Users/ridwanarifandi/DevKinsta/public/solutionsforscreenprintersv1/wp-content/plugins/divi-to-gutenberg-converter/includes/converters/class-converter-base.php:*)"
+    ]
+  }
+}

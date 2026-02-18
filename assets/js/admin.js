@@ -12,7 +12,8 @@
 		'vc_message', 'vc_icon', 'vc_copyright', 'vc_button', 'vc_button2',
 		'mk_page_section', 'mk_fancy_title', 'mk_ornamental_title', 'mk_title_box',
 		'mk_button', 'mk_button_gradient', 'mk_image', 'mk_padding_divider',
-		'mk_divider', 'mk_blockquote', 'mk_custom_list', 'mk_highlight', 'mk_dropcaps'
+		'mk_divider', 'mk_blockquote', 'mk_custom_list', 'mk_highlight', 'mk_dropcaps',
+		'mk_custom_box'
 	];
 
 	/**
@@ -144,6 +145,14 @@
 			$('#dtg-preview-title').text('Preview: ' + data.post_title + ' (ID: ' + data.post_id + ')');
 			$('#dtg-preview-original').text(data.original);
 			$('#dtg-preview-converted').text(data.converted);
+
+			// Show generated CSS if any.
+			if (data.css) {
+				$('#dtg-preview-css-wrap').show();
+				$('#dtg-preview-css').text(data.css);
+			} else {
+				$('#dtg-preview-css-wrap').hide();
+			}
 
 			// Scroll to preview.
 			$('html, body').animate({
@@ -310,6 +319,42 @@
 		var $log = $('#dtg-log-entries');
 		$log.scrollTop($log[0].scrollHeight);
 	}
+
+	/**
+	 * Regenerate CSS file.
+	 */
+	$('#dtg-regenerate-css-btn').on('click', function() {
+		var $btn = $(this);
+		var $spinner = $('#dtg-css-spinner');
+
+		$btn.prop('disabled', true);
+		$spinner.addClass('is-active');
+
+		$.post(DTG.ajaxUrl, {
+			action: 'dtg_regenerate_css',
+			nonce: DTG.nonce
+		}, function(response) {
+			$btn.prop('disabled', false);
+			$spinner.removeClass('is-active');
+
+			var $results = $('#dtg-css-results');
+			$results.show();
+
+			if (response.success) {
+				var data = response.data;
+				$results.html(
+					'<div class="notice notice-success inline"><p>CSS file regenerated. ' +
+					data.post_count + ' posts, file size: ' + escHtml(data.file_size) + '</p></div>'
+				);
+			} else {
+				$results.html('<div class="notice notice-error inline"><p>Failed: ' + escHtml(response.data) + '</p></div>');
+			}
+		}).fail(function() {
+			$btn.prop('disabled', false);
+			$spinner.removeClass('is-active');
+			alert('AJAX request failed');
+		});
+	});
 
 	/**
 	 * Escape HTML.

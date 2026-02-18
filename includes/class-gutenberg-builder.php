@@ -9,23 +9,24 @@ defined( 'ABSPATH' ) || die( '-1' );
 
 class DTG_Gutenberg_Builder {
 
-	/**
-	 * Registered converters.
-	 *
-	 * @var DTG_Converter_Base[]
-	 */
+	/** @var DTG_Converter_Base[] */
 	private $converters = [];
 
-	/**
-	 * Shortcode parser instance.
-	 *
-	 * @var DTG_Shortcode_Parser
-	 */
+	/** @var DTG_Shortcode_Parser */
 	private $parser;
 
-	/**
-	 * Constructor — register all converters.
-	 */
+	/** @var array Collected CSS rules during conversion. */
+	private $css_rules = [];
+
+	/** @var array Collected Google Font families. */
+	private $google_fonts = [];
+
+	/** @var int Element counter for unique class names. */
+	private $element_counter = 0;
+
+	/** @var int Current post ID. */
+	private $post_id = 0;
+
 	public function __construct() {
 		$this->parser = new DTG_Shortcode_Parser();
 
@@ -37,21 +38,109 @@ class DTG_Gutenberg_Builder {
 		$this->register_converter( new DTG_Converter_Misc() );
 	}
 
-	/**
-	 * Register a converter and inject builder reference.
-	 *
-	 * @param DTG_Converter_Base $converter Converter instance.
-	 */
 	private function register_converter( DTG_Converter_Base $converter ) {
 		$converter->set_builder( $this );
 		$this->converters[] = $converter;
 	}
 
 	/**
+	 * Set current post ID and reset CSS state.
+	 */
+	public function set_post_id( $post_id ) {
+		$this->post_id         = (int) $post_id;
+		$this->css_rules       = [];
+		$this->google_fonts    = [];
+		$this->element_counter = 0;
+	}
+
+	/**
+	 * Get next unique CSS class name.
+	 */
+	public function next_class() {
+		$this->element_counter++;
+		return 'dtg-' . $this->post_id . '-' . $this->element_counter;
+	}
+
+	/**
+	 * Add a CSS rule to the collection.
+	 */
+	public function add_css( $selector, $declarations ) {
+		if ( ! empty( $declarations ) ) {
+			$this->css_rules[] = [
+				'selector'     => $selector,
+				'declarations' => $declarations,
+			];
+		}
+	}
+
+	/**
+	 * Register a Google Font family.
+	 */
+	public function add_google_font( $font_family, $weight = '400', $style = 'normal' ) {
+		$font_family = trim( $font_family );
+		if ( empty( $font_family ) ) {
+			return;
+		}
+
+		if ( ! isset( $this->google_fonts[ $font_family ] ) ) {
+			$this->google_fonts[ $font_family ] = [];
+		}
+
+		$variant = $weight;
+		if ( 'italic' === $style ) {
+			$variant .= 'italic';
+		}
+
+		if ( ! in_array( $variant, $this->google_fonts[ $font_family ], true ) ) {
+			$this->google_fonts[ $font_family ][] = $variant;
+		}
+	}
+
+	/**
+	 * Get all collected CSS as string.
+	 */
+	public function get_collected_css() {
+		if ( empty( $this->css_rules ) ) {
+			return '';
+		}
+
+		$css = '/* Post ID: ' . $this->post_id . " */\n";
+		foreach ( $this->css_rules as $rule ) {
+			$css .= $rule['selector'] . " {\n";
+			foreach ( $rule['declarations'] as $prop => $value ) {
+				$css .= '  ' . $prop . ': ' . $value . ";\n";
+			}
+			$css .= "}\n";
+		}
+
+		return $css;
+	}
+
+	/**
+	 * Get Google Fonts @import CSS.
+	 */
+	public function get_google_fonts_css() {
+		if ( empty( $this->google_fonts ) ) {
+			return '';
+		}
+
+		$families = [];
+		foreach ( $this->google_fonts as $family => $variants ) {
+			$families[] = str_replace( ' ', '+', $family ) . ':' . implode( ',', $variants );
+		}
+
+		return '@import url("https://fonts.googleapis.com/css?family=' . implode( '|', $families ) . '&display=swap");' . "\n";
+	}
+
+	/**
+	 * Get raw Google Fonts data.
+	 */
+	public function get_google_fonts() {
+		return $this->google_fonts;
+	}
+
+	/**
 	 * Convert post content from shortcodes to Gutenberg blocks.
-	 *
-	 * @param string $content Raw post content with shortcodes.
-	 * @return string Gutenberg block markup.
 	 */
 	public function convert( $content ) {
 		$nodes = $this->parser->parse( $content );
@@ -64,12 +153,7 @@ class DTG_Gutenberg_Builder {
 	}
 
 	/**
-	 * Build Gutenberg markup from an array of AST nodes.
-	 *
-	 * Called by converters for recursive child processing.
-	 *
-	 * @param array $nodes Array of AST nodes.
-	 * @return string Combined Gutenberg block markup.
+	 * Build Gutenberg markup from AST nodes.
 	 */
 	public function build_from_nodes( $nodes ) {
 		$output = '';
@@ -81,19 +165,11 @@ class DTG_Gutenberg_Builder {
 		return $output;
 	}
 
-	/**
-	 * Convert a single AST node to Gutenberg markup.
-	 *
-	 * @param array $node AST node.
-	 * @return string Gutenberg block markup.
-	 */
 	private function convert_node( $node ) {
-		// Text nodes — wrap in paragraph or pass through.
 		if ( 'text' === $node['type'] ) {
 			return $this->convert_text_node( $node );
 		}
 
-		// Shortcode nodes — try Tier 1 converters.
 		$tag = $node['tag'];
 
 		foreach ( $this->converters as $converter ) {
@@ -102,19 +178,9 @@ class DTG_Gutenberg_Builder {
 			}
 		}
 
-		// Tier 2 — leave shortcode as-is, wrapped in wp:html block.
 		return $this->wrap_as_shortcode_block( $node );
 	}
 
-	/**
-	 * Convert a text node.
-	 *
-	 * If the text contains HTML structure, wrap in wp:freeform.
-	 * If it's plain text, wrap in wp:paragraph.
-	 *
-	 * @param array $node Text node.
-	 * @return string
-	 */
 	private function convert_text_node( $node ) {
 		$content = trim( $node['content'] );
 
@@ -122,7 +188,6 @@ class DTG_Gutenberg_Builder {
 			return '';
 		}
 
-		// If content has HTML block-level tags, use freeform (Classic block).
 		if ( preg_match( '/<(?:div|table|ul|ol|h[1-6]|blockquote|figure|form|section|article|header|footer|nav|aside|p)\b/i', $content ) ) {
 			$output  = '<!-- wp:freeform -->' . "\n";
 			$output .= $content . "\n";
@@ -130,7 +195,6 @@ class DTG_Gutenberg_Builder {
 			return $output;
 		}
 
-		// Simple inline text — wrap in paragraph.
 		$output  = '<!-- wp:paragraph -->' . "\n";
 		$output .= '<p>' . wp_kses_post( $content ) . '</p>' . "\n";
 		$output .= '<!-- /wp:paragraph -->' . "\n\n";
@@ -138,17 +202,10 @@ class DTG_Gutenberg_Builder {
 		return $output;
 	}
 
-	/**
-	 * Wrap a Tier 2 shortcode node — leave the shortcode text as-is inside wp:html.
-	 *
-	 * @param array $node Shortcode AST node.
-	 * @return string
-	 */
 	private function wrap_as_shortcode_block( $node ) {
 		$raw = isset( $node['raw'] ) ? $node['raw'] : '';
 
 		if ( empty( $raw ) ) {
-			// Reconstruct from node data.
 			$raw = $this->reconstruct_shortcode( $node );
 		}
 
@@ -163,12 +220,6 @@ class DTG_Gutenberg_Builder {
 		return $output;
 	}
 
-	/**
-	 * Reconstruct shortcode string from node data.
-	 *
-	 * @param array $node AST node.
-	 * @return string
-	 */
 	private function reconstruct_shortcode( $node ) {
 		$tag   = $node['tag'];
 		$attrs = isset( $node['attrs'] ) ? $node['attrs'] : [];
@@ -185,7 +236,6 @@ class DTG_Gutenberg_Builder {
 
 		$shortcode .= ']';
 
-		// Add inner content.
 		$content = isset( $node['content'] ) ? $node['content'] : '';
 		if ( '' !== $content ) {
 			$shortcode .= $content . '[/' . $tag . ']';
@@ -194,21 +244,10 @@ class DTG_Gutenberg_Builder {
 		return $shortcode;
 	}
 
-	/**
-	 * Get the parser instance.
-	 *
-	 * @return DTG_Shortcode_Parser
-	 */
 	public function get_parser() {
 		return $this->parser;
 	}
 
-	/**
-	 * Analyze content and return a report of shortcodes found.
-	 *
-	 * @param string $content Post content.
-	 * @return array Associative array: tag => count.
-	 */
 	public function analyze_shortcodes( $content ) {
 		$nodes   = $this->parser->parse( $content );
 		$results = [];
@@ -219,12 +258,6 @@ class DTG_Gutenberg_Builder {
 		return $results;
 	}
 
-	/**
-	 * Recursively count shortcodes in AST nodes.
-	 *
-	 * @param array $nodes   AST nodes.
-	 * @param array &$counts Running count by tag.
-	 */
 	private function count_shortcodes( $nodes, &$counts ) {
 		foreach ( $nodes as $node ) {
 			if ( 'shortcode' === $node['type'] ) {

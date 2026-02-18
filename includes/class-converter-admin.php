@@ -157,6 +157,10 @@ class DTG_Converter_Admin {
 							<pre id="dtg-preview-converted" class="dtg-code-block"></pre>
 						</div>
 					</div>
+					<div id="dtg-preview-css-wrap" style="display:none;">
+						<h4><?php esc_html_e( 'Generated CSS', 'dtg-converter' ); ?></h4>
+						<pre id="dtg-preview-css" class="dtg-code-block dtg-css-block"></pre>
+					</div>
 				</div>
 			</div>
 
@@ -210,6 +214,34 @@ class DTG_Converter_Admin {
 				</p>
 
 				<div id="dtg-rollback-results" style="display:none;"></div>
+			</div>
+
+			<!-- CSS Management Section -->
+			<div class="dtg-section" id="dtg-css-section">
+				<h2><?php esc_html_e( 'CSS Management', 'dtg-converter' ); ?></h2>
+				<p><?php esc_html_e( 'Manage the generated CSS file for converted posts.', 'dtg-converter' ); ?></p>
+
+				<?php
+				$css_url = DTG_Batch_Processor::get_css_file_url();
+				if ( $css_url ) :
+					?>
+					<div class="notice notice-success inline">
+						<p>
+							<?php esc_html_e( 'CSS file is active:', 'dtg-converter' ); ?>
+							<code><?php echo esc_html( $css_url ); ?></code>
+						</p>
+					</div>
+				<?php else : ?>
+					<div class="notice notice-info inline">
+						<p><?php esc_html_e( 'No CSS file generated yet. Run a conversion first or click Regenerate CSS.', 'dtg-converter' ); ?></p>
+					</div>
+				<?php endif; ?>
+
+				<button type="button" class="button" id="dtg-regenerate-css-btn">
+					<?php esc_html_e( 'Regenerate CSS', 'dtg-converter' ); ?>
+				</button>
+				<span class="spinner" id="dtg-css-spinner"></span>
+				<div id="dtg-css-results" style="display:none;"></div>
 			</div>
 		</div>
 		<?php

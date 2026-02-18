@@ -1,6 +1,6 @@
 <?php
 /**
- * Converter for button shortcodes: vc_btn, mk_button, mk_button_gradient.
+ * Converter for button shortcodes.
  *
  * @package DTG_Converter
  */
@@ -9,11 +9,6 @@ defined( 'ABSPATH' ) || die( '-1' );
 
 class DTG_Converter_Button extends DTG_Converter_Base {
 
-	/**
-	 * Tags handled by this converter.
-	 *
-	 * @var array
-	 */
 	private $tags = [
 		'vc_btn',
 		'vc_button',
@@ -22,16 +17,10 @@ class DTG_Converter_Button extends DTG_Converter_Base {
 		'mk_button_gradient',
 	];
 
-	/**
-	 * {@inheritdoc}
-	 */
 	public function can_convert( $tag ) {
 		return in_array( $tag, $this->tags, true );
 	}
 
-	/**
-	 * {@inheritdoc}
-	 */
 	public function convert( $node ) {
 		switch ( $node['tag'] ) {
 			case 'vc_btn':
@@ -50,12 +39,6 @@ class DTG_Converter_Button extends DTG_Converter_Base {
 		}
 	}
 
-	/**
-	 * Convert vc_btn to wp:buttons > wp:button.
-	 *
-	 * @param array $node AST node.
-	 * @return string
-	 */
 	private function convert_vc_btn( $node ) {
 		$attrs = isset( $node['attrs'] ) ? $node['attrs'] : [];
 
@@ -67,12 +50,6 @@ class DTG_Converter_Button extends DTG_Converter_Base {
 		return $this->build_button_block( $title, $link_data, $align );
 	}
 
-	/**
-	 * Convert legacy vc_button / vc_button2 to wp:buttons.
-	 *
-	 * @param array $node AST node.
-	 * @return string
-	 */
 	private function convert_vc_button_legacy( $node ) {
 		$attrs = isset( $node['attrs'] ) ? $node['attrs'] : [];
 
@@ -94,16 +71,10 @@ class DTG_Converter_Button extends DTG_Converter_Base {
 		return $this->build_button_block( $title, $link_data );
 	}
 
-	/**
-	 * Convert mk_button / mk_button_gradient to wp:buttons > wp:button.
-	 *
-	 * @param array $node AST node.
-	 * @return string
-	 */
 	private function convert_mk_button( $node ) {
 		$attrs = isset( $node['attrs'] ) ? $node['attrs'] : [];
 
-		$text   = isset( $node['content'] ) ? trim( strip_tags( $node['content'] ) ) : '';
+		$text = isset( $node['content'] ) ? trim( strip_tags( $node['content'] ) ) : '';
 		if ( empty( $text ) ) {
 			$text = $this->get_attr( $attrs, 'text', 'Button' );
 		}
@@ -119,18 +90,65 @@ class DTG_Converter_Button extends DTG_Converter_Base {
 			'rel'    => '',
 		];
 
-		return $this->build_button_block( $text, $link_data, $align );
+		// Collect CSS for the button.
+		$css_declarations   = [];
+		$hover_declarations = [];
+
+		$bg_color = $this->get_attr( $attrs, 'bg_color', '' );
+		if ( $bg_color ) {
+			$css_declarations['background-color'] = $bg_color;
+		}
+
+		$txt_color = $this->get_attr( $attrs, 'txt_color', '' );
+		if ( $txt_color ) {
+			$css_declarations['color'] = $txt_color;
+		}
+
+		$btn_hover_bg = $this->get_attr( $attrs, 'btn_hover_bg', '' );
+		if ( $btn_hover_bg ) {
+			$hover_declarations['background-color'] = $btn_hover_bg;
+		}
+
+		$btn_hover_txt = $this->get_attr( $attrs, 'btn_hover_txt_color', '' );
+		if ( $btn_hover_txt ) {
+			$hover_declarations['color'] = $btn_hover_txt;
+		}
+
+		$corner_style = $this->get_attr( $attrs, 'corner_style', '' );
+		if ( 'full_rounded' === $corner_style ) {
+			$css_declarations['border-radius'] = '99px';
+		} elseif ( 'rounded' === $corner_style ) {
+			$css_declarations['border-radius'] = '4px';
+		}
+
+		$dimension = $this->get_attr( $attrs, 'dimension', '' );
+		if ( 'flat' === $dimension ) {
+			$css_declarations['border'] = 'none';
+		} elseif ( 'outline' === $dimension ) {
+			$border_color = $bg_color ? $bg_color : '#333';
+			$css_declarations['border']           = '2px solid ' . $border_color;
+			$css_declarations['background-color']  = 'transparent';
+			$css_declarations['color']             = $border_color;
+		}
+
+		$margin_bottom = $this->get_attr( $attrs, 'margin_bottom', '' );
+		if ( $margin_bottom && '0' !== $margin_bottom ) {
+			$css_declarations['margin-bottom'] = $this->ensure_px( $margin_bottom );
+		}
+
+		$css_class = '';
+		if ( ! empty( $css_declarations ) ) {
+			$css_class = $this->next_class();
+			$this->add_css( $css_class, $css_declarations );
+			if ( ! empty( $hover_declarations ) ) {
+				$this->add_css_hover( $css_class, $hover_declarations );
+			}
+		}
+
+		return $this->build_button_block( $text, $link_data, $align, $css_class );
 	}
 
-	/**
-	 * Build wp:buttons > wp:button block markup.
-	 *
-	 * @param string $text      Button text.
-	 * @param array  $link_data Link data (url, title, target, rel).
-	 * @param string $align     Alignment (left, center, right).
-	 * @return string
-	 */
-	private function build_button_block( $text, $link_data = [], $align = '' ) {
+	private function build_button_block( $text, $link_data = [], $align = '', $css_class = '' ) {
 		$text = $this->esc_block_text( $text );
 		if ( empty( $text ) ) {
 			$text = 'Button';
@@ -145,12 +163,11 @@ class DTG_Converter_Button extends DTG_Converter_Base {
 
 		if ( $align && isset( $layout_map[ $align ] ) ) {
 			$buttons_attrs['layout'] = [
-				'type'            => 'flex',
-				'justifyContent'  => $layout_map[ $align ],
+				'type'           => 'flex',
+				'justifyContent' => $layout_map[ $align ],
 			];
 		}
 
-		// Build inner button.
 		$button_attrs = [];
 		if ( ! empty( $link_data['url'] ) ) {
 			$button_attrs['url'] = $link_data['url'];
@@ -164,10 +181,19 @@ class DTG_Converter_Button extends DTG_Converter_Base {
 			}
 		}
 
+		if ( $css_class ) {
+			$button_attrs['className'] = $css_class;
+		}
+
 		$href_attr = '';
 		if ( ! empty( $link_data['url'] ) ) {
 			$target_attr = ( '_blank' === ( $link_data['target'] ?? '' ) ) ? ' target="_blank" rel="noreferrer noopener"' : '';
 			$href_attr   = ' href="' . esc_url( $link_data['url'] ) . '"' . $target_attr;
+		}
+
+		$btn_class = 'wp-block-button__link wp-element-button';
+		if ( $css_class ) {
+			$btn_class .= ' ' . esc_attr( $css_class );
 		}
 
 		$output  = '<!-- wp:buttons' . $this->json_attrs( $buttons_attrs ) . ' -->' . "\n";
@@ -175,7 +201,7 @@ class DTG_Converter_Button extends DTG_Converter_Base {
 
 		$output .= '<!-- wp:button' . $this->json_attrs( $button_attrs ) . ' -->' . "\n";
 		$output .= '<div class="wp-block-button">';
-		$output .= '<a class="wp-block-button__link wp-element-button"' . $href_attr . '>' . $text . '</a>';
+		$output .= '<a class="' . $btn_class . '"' . $href_attr . '>' . $text . '</a>';
 		$output .= '</div>' . "\n";
 		$output .= '<!-- /wp:button -->';
 

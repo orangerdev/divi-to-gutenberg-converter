@@ -124,6 +124,19 @@
 	word-wrap: break-word;
 }
 
+.dtg-css-block {
+	background: #1a2332;
+	color: #9cdcfe;
+}
+
+#dtg-preview-css-wrap {
+	margin-top: 15px;
+}
+
+#dtg-css-results {
+	margin-top: 10px;
+}
+
 /* Progress bar */
 .dtg-progress-bar {
 	width: 100%;

@@ -78,6 +78,10 @@ if ( ! class_exists( 'DTG_Converter' ) ) {
 			add_action( 'wp_ajax_dtg_run_batch', [ $this, 'ajax_run_batch' ] );
 			add_action( 'wp_ajax_dtg_rollback_post', [ $this, 'ajax_rollback_post' ] );
 			add_action( 'wp_ajax_dtg_rollback_all', [ $this, 'ajax_rollback_all' ] );
+			add_action( 'wp_ajax_dtg_regenerate_css', [ $this, 'ajax_regenerate_css' ] );
+
+			// Frontend CSS enqueue.
+			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_frontend_css' ] );
 		}
 
 		/**
@@ -168,6 +172,12 @@ if ( ! class_exists( 'DTG_Converter' ) ) {
 			$processor = new DTG_Batch_Processor();
 			$result    = $processor->process_batch( $offset, $limit );
 
+			// Regenerate CSS file when all batches are done.
+			if ( ! $result['has_more'] ) {
+				$css_result         = $processor->regenerate_css_file();
+				$result['css_file'] = $css_result;
+			}
+
 			wp_send_json_success( $result );
 		}
 
@@ -210,7 +220,42 @@ if ( ! class_exists( 'DTG_Converter' ) ) {
 			$processor = new DTG_Batch_Processor();
 			$result    = $processor->rollback_all();
 
+			// Regenerate CSS file after rollback.
+			$processor->regenerate_css_file();
+
 			wp_send_json_success( $result );
+		}
+
+		/**
+		 * AJAX: Regenerate the aggregated CSS file.
+		 */
+		public function ajax_regenerate_css() {
+			check_ajax_referer( 'dtg_converter_nonce', 'nonce' );
+
+			if ( ! current_user_can( 'manage_options' ) ) {
+				wp_send_json_error( 'Unauthorized' );
+			}
+
+			$processor = new DTG_Batch_Processor();
+			$result    = $processor->regenerate_css_file();
+
+			if ( $result['success'] ) {
+				wp_send_json_success( $result );
+			} else {
+				wp_send_json_error( $result['message'] );
+			}
+		}
+
+		/**
+		 * Enqueue the generated CSS file on the frontend.
+		 */
+		public function enqueue_frontend_css() {
+			$css_url = DTG_Batch_Processor::get_css_file_url();
+
+			if ( $css_url ) {
+				$version = get_option( 'dtg_css_version', self::VERSION );
+				wp_enqueue_style( 'dtg-converter-custom', $css_url, [], $version );
+			}
 		}
 
 		/**

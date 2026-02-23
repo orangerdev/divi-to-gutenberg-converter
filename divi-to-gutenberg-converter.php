@@ -82,6 +82,9 @@ if ( ! class_exists( 'DTG_Converter' ) ) {
 
 			// Frontend CSS enqueue.
 			add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_frontend_css' ] );
+
+			// Block editor CSS enqueue (so styles are visible while editing).
+			add_action( 'enqueue_block_editor_assets', [ $this, 'enqueue_editor_css' ] );
 		}
 
 		/**
@@ -255,6 +258,33 @@ if ( ! class_exists( 'DTG_Converter' ) ) {
 			if ( $css_url ) {
 				$version = get_option( 'dtg_css_version', self::VERSION );
 				wp_enqueue_style( 'dtg-converter-custom', $css_url, [], $version );
+			}
+		}
+
+		/**
+		 * Enqueue CSS inside the Gutenberg block editor so converted
+		 * blocks render with the correct styles while editing.
+		 */
+		public function enqueue_editor_css() {
+			// 1. Enqueue the global aggregated CSS file.
+			$css_url = DTG_Batch_Processor::get_css_file_url();
+			if ( $css_url ) {
+				$version = get_option( 'dtg_css_version', self::VERSION );
+				wp_enqueue_style( 'dtg-converter-custom', $css_url, [], $version );
+			}
+
+			// 2. Add per-post inline CSS (covers posts not yet aggregated).
+			$post_id = get_the_ID();
+			if ( $post_id ) {
+				$post_css = get_post_meta( $post_id, '_dtg_custom_css', true );
+				if ( $post_css ) {
+					// Ensure handle exists before adding inline style.
+					if ( ! wp_style_is( 'dtg-converter-custom', 'enqueued' ) ) {
+						wp_register_style( 'dtg-converter-custom', false );
+						wp_enqueue_style( 'dtg-converter-custom' );
+					}
+					wp_add_inline_style( 'dtg-converter-custom', $post_css );
+				}
 			}
 		}
 

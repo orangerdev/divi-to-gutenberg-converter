@@ -106,11 +106,24 @@ class DTG_Gutenberg_Builder {
 
 		$css = '/* Post ID: ' . $this->post_id . " */\n";
 		foreach ( $this->css_rules as $rule ) {
-			$css .= $rule['selector'] . " {\n";
-			foreach ( $rule['declarations'] as $prop => $value ) {
-				$css .= '  ' . $prop . ': ' . $value . ";\n";
+			$selector = $rule['selector'];
+
+			// Detect @media wrapped selectors and output properly nested CSS.
+			if ( preg_match( '/^(@media[^{]+)\{\s*(.+?)(?:\s*\})?$/', $selector, $m ) ) {
+				$css .= trim( $m[1] ) . " {\n";
+				$css .= '  ' . trim( $m[2] ) . " {\n";
+				foreach ( $rule['declarations'] as $prop => $value ) {
+					$css .= '    ' . $prop . ': ' . $value . ";\n";
+				}
+				$css .= "  }\n";
+				$css .= "}\n";
+			} else {
+				$css .= $selector . " {\n";
+				foreach ( $rule['declarations'] as $prop => $value ) {
+					$css .= '  ' . $prop . ': ' . $value . ";\n";
+				}
+				$css .= "}\n";
 			}
-			$css .= "}\n";
 		}
 
 		return $css;

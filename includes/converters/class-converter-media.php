@@ -85,6 +85,15 @@ class DTG_Converter_Media extends DTG_Converter_Base {
 		$caption     = $this->get_attr( $attrs, 'caption', '' );
 		$link        = $this->get_attr( $attrs, 'link', '' );
 
+		// Parse CSS attribute.
+		$css_attr  = $this->get_attr( $attrs, 'css', '' );
+		$vc_css    = $this->parse_vc_css( $css_attr );
+		$css_class = '';
+		if ( ! empty( $vc_css ) ) {
+			$css_class = $this->next_class();
+			$this->add_css( $css_class, $vc_css );
+		}
+
 		if ( is_numeric( $image_src ) ) {
 			$url = wp_get_attachment_url( (int) $image_src );
 			$alt = get_post_meta( (int) $image_src, '_wp_attachment_image_alt', true );
@@ -94,17 +103,17 @@ class DTG_Converter_Media extends DTG_Converter_Base {
 			}
 
 			$link_data = [ 'url' => $link, 'title' => '', 'target' => '', 'rel' => '' ];
-			return $this->build_image_block( (int) $image_src, $url, $alt, $alignment, $caption, $link_data );
+			return $this->build_image_block( (int) $image_src, $url, $alt, $alignment, $caption, $link_data, $css_class );
 		}
 
 		// If src is a URL string.
 		if ( $image_src && ! is_numeric( $image_src ) ) {
-			return $this->build_image_block( 0, $image_src, '', $alignment, $caption );
+			return $this->build_image_block( 0, $image_src, '', $alignment, $caption, [], $css_class );
 		}
 
 		$image_url = $this->get_attr( $attrs, 'image_url', '' );
 		if ( $image_url ) {
-			return $this->build_image_block( 0, $image_url, '', $alignment, $caption );
+			return $this->build_image_block( 0, $image_url, '', $alignment, $caption, [], $css_class );
 		}
 
 		return '';

@@ -61,16 +61,39 @@ class DTG_Converter_Separator extends DTG_Converter_Base {
 		$border_width = $this->get_attr( $attrs, 'border_width', '' );
 		if ( $border_width ) {
 			$css_declarations['border-top-width'] = $this->ensure_px( $border_width );
+			$css_declarations['border-top-style'] = $border_style;
 		}
 
-		$sep_color = $this->get_attr( $attrs, 'color', '' );
+		$sep_color    = $this->get_attr( $attrs, 'color', '' );
+		$named_colors = [
+			'white'       => '#ffffff',
+			'grey'        => '#ebebeb',
+			'black'       => '#000000',
+			'blue'        => '#5472d2',
+			'turquoise'   => '#00c1cf',
+			'pink'        => '#fe6c61',
+			'violet'      => '#8d6dc4',
+			'peacoc'      => '#4cadc9',
+			'chino'       => '#cec2ab',
+			'mulled_wine' => '#50485b',
+			'vista_blue'  => '#75d69c',
+			'orange'      => '#f7be68',
+			'sky'         => '#5aa1e3',
+			'green'       => '#6dab3c',
+			'juicy_pink'  => '#f4524d',
+			'sandy_brown' => '#f79468',
+			'purple'      => '#b97ebb',
+			'red'         => '#ff0000',
+		];
 		if ( $sep_color && 'grey' !== $sep_color ) {
-			$css_declarations['border-top-color'] = $sep_color;
+			$resolved = isset( $named_colors[ $sep_color ] ) ? $named_colors[ $sep_color ] : $sep_color;
+			$css_declarations['border-top-color'] = $resolved;
 		}
 
 		// vc_separator css attribute.
 		$css_attr = $this->get_attr( $attrs, 'css', '' );
 		$vc_css   = $this->parse_vc_css( $css_attr );
+		$vc_class = $this->extract_vc_class( $css_attr );
 		if ( ! empty( $vc_css ) ) {
 			$css_declarations = array_merge( $css_declarations, $vc_css );
 		}
@@ -85,14 +108,15 @@ class DTG_Converter_Separator extends DTG_Converter_Base {
 		if ( 'is-style-dots' === $style_class ) {
 			$block_attrs['className'] = 'is-style-dots';
 		}
-		if ( $css_class ) {
+		$extra_class = trim( $css_class . ( $vc_class ? ' ' . $vc_class : '' ) );
+		if ( $extra_class ) {
 			$existing = isset( $block_attrs['className'] ) ? $block_attrs['className'] . ' ' : '';
-			$block_attrs['className'] = $existing . $css_class;
+			$block_attrs['className'] = $existing . $extra_class;
 		}
 
 		$hr_class = 'wp-block-separator has-alpha-channel-opacity ' . esc_attr( $style_class );
-		if ( $css_class ) {
-			$hr_class .= ' ' . esc_attr( $css_class );
+		if ( $extra_class ) {
+			$hr_class .= ' ' . esc_attr( $extra_class );
 		}
 
 		$output  = '<!-- wp:separator' . $this->json_attrs( $block_attrs ) . ' -->' . "\n";
@@ -122,6 +146,7 @@ class DTG_Converter_Separator extends DTG_Converter_Base {
 		// vc_empty_space css attribute.
 		$css_attr  = $this->get_attr( $attrs, 'css', '' );
 		$vc_css    = $this->parse_vc_css( $css_attr );
+		$vc_class  = $this->extract_vc_class( $css_attr );
 		$css_class = '';
 
 		if ( ! empty( $vc_css ) ) {
@@ -129,14 +154,16 @@ class DTG_Converter_Separator extends DTG_Converter_Base {
 			$this->add_css( $css_class, $vc_css );
 		}
 
+		$class_list = trim( $css_class . ( $vc_class ? ' ' . $vc_class : '' ) );
+
 		$block_attrs = [ 'height' => $height ];
-		if ( $css_class ) {
-			$block_attrs['className'] = $css_class;
+		if ( $class_list ) {
+			$block_attrs['className'] = $class_list;
 		}
 
 		$div_class = 'wp-block-spacer';
-		if ( $css_class ) {
-			$div_class .= ' ' . esc_attr( $css_class );
+		if ( $class_list ) {
+			$div_class .= ' ' . esc_attr( $class_list );
 		}
 
 		$output  = '<!-- wp:spacer' . $this->json_attrs( $block_attrs ) . ' -->' . "\n";

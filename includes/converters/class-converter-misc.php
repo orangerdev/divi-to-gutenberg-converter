@@ -19,6 +19,8 @@ class DTG_Converter_Misc extends DTG_Converter_Base {
 		'vc_icon',
 		'vc_copyright',
 		'mk_custom_box',
+		'mk_header',
+		'mk_testimonials',
 	];
 
 	public function can_convert( $tag ) {
@@ -49,6 +51,12 @@ class DTG_Converter_Misc extends DTG_Converter_Base {
 
 			case 'mk_custom_box':
 				return $this->convert_custom_box( $node );
+
+			case 'mk_header':
+				return $this->convert_mk_header( $node );
+
+			case 'mk_testimonials':
+				return $this->convert_mk_testimonials( $node );
 
 			default:
 				return '';
@@ -223,6 +231,7 @@ class DTG_Converter_Misc extends DTG_Converter_Base {
 		$css_declarations['padding-left']  = '20px';
 		$css_declarations['padding-right'] = '20px';
 		$css_declarations['overflow']      = 'hidden';
+		$css_declarations['box-sizing']    = 'border-box';
 
 		$css_class = $this->next_class();
 		$this->add_css( $css_class, $css_declarations );
@@ -251,6 +260,74 @@ class DTG_Converter_Misc extends DTG_Converter_Base {
 		$output .= $inner_content;
 		$output .= '</div>' . "\n";
 		$output .= '<!-- /wp:group -->' . "\n\n";
+
+		return $output;
+	}
+
+	/**
+	 * Convert mk_header to a styled wp:html block preserving the shortcode.
+	 */
+	private function convert_mk_header( $node ) {
+		$attrs = isset( $node['attrs'] ) ? $node['attrs'] : [];
+
+		$bg_color   = $this->get_attr( $attrs, 'bg_color', '' );
+		$text_color = $this->get_attr( $attrs, 'text_color', '' );
+		$align      = $this->get_attr( $attrs, 'align', '' );
+
+		$css_declarations = [];
+		if ( $bg_color ) {
+			$css_declarations['background-color'] = $bg_color;
+		}
+		if ( $text_color ) {
+			$css_declarations['color'] = $text_color;
+		}
+		if ( $align ) {
+			$css_declarations['text-align'] = $align;
+		}
+
+		$css_class = '';
+		if ( ! empty( $css_declarations ) ) {
+			$css_class = $this->next_class();
+			$this->add_css( $css_class, $css_declarations );
+
+			// Hover text color.
+			$text_hover = $this->get_attr( $attrs, 'text_hover_skin', '' );
+			if ( $text_hover ) {
+				$this->add_css_hover( $css_class, [ 'color' => $text_hover ] );
+			}
+		}
+
+		$raw = isset( $node['raw'] ) ? $node['raw'] : '';
+		if ( empty( $raw ) ) {
+			return '';
+		}
+
+		$class_attr = $css_class ? ' class="' . esc_attr( $css_class ) . '"' : '';
+
+		$output  = '<!-- wp:html -->' . "\n";
+		$output .= '<div' . $class_attr . '>' . $raw . '</div>' . "\n";
+		$output .= '<!-- /wp:html -->' . "\n\n";
+
+		return $output;
+	}
+
+	/**
+	 * Convert mk_testimonials to a wp:html block preserving el_class.
+	 */
+	private function convert_mk_testimonials( $node ) {
+		$attrs    = isset( $node['attrs'] ) ? $node['attrs'] : [];
+		$el_class = $this->get_attr( $attrs, 'el_class', '' );
+		$raw      = isset( $node['raw'] ) ? $node['raw'] : '';
+
+		if ( empty( $raw ) ) {
+			return '';
+		}
+
+		$class_attr = $el_class ? ' class="' . esc_attr( $el_class ) . '"' : '';
+
+		$output  = '<!-- wp:html -->' . "\n";
+		$output .= '<div' . $class_attr . '>' . $raw . '</div>' . "\n";
+		$output .= '<!-- /wp:html -->' . "\n\n";
 
 		return $output;
 	}

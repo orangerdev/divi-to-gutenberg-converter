@@ -269,12 +269,29 @@ class DTG_Batch_Processor {
 			update_post_meta( $post->ID, self::CSS_BACKUP_META_KEY, $wpb_css );
 		}
 
+		// 2b. Backup WPBakery post custom CSS (user-authored page-specific CSS).
+		$wpb_post_css = get_post_meta( $post->ID, '_wpb_post_custom_css', true );
+		if ( $wpb_post_css ) {
+			update_post_meta( $post->ID, '_dtg_wpb_post_css_backup', $wpb_post_css );
+		}
+
 		// 3. Convert content with CSS collection.
 		$this->builder->set_post_id( $post->ID );
 		$converted = $this->builder->convert( $original );
 
 		// 4. Save collected CSS and Google Fonts to post meta.
 		$post_css = $this->builder->get_collected_css();
+
+		// Append original WPBakery shortcode CSS (preserved vc_custom_* classes).
+		if ( $wpb_css ) {
+			$post_css .= "\n/* WPBakery Shortcode CSS */\n" . $wpb_css;
+		}
+
+		// Append WPBakery post custom CSS (user-authored).
+		if ( $wpb_post_css ) {
+			$post_css .= "\n/* WPBakery Post Custom CSS */\n" . $wpb_post_css;
+		}
+
 		if ( ! empty( $post_css ) ) {
 			update_post_meta( $post->ID, self::CSS_META_KEY, $post_css );
 		}
@@ -303,6 +320,7 @@ class DTG_Batch_Processor {
 			);
 			delete_post_meta( $post->ID, self::BACKUP_META_KEY );
 			delete_post_meta( $post->ID, self::CSS_BACKUP_META_KEY );
+			delete_post_meta( $post->ID, '_dtg_wpb_post_css_backup' );
 			delete_post_meta( $post->ID, self::CSS_META_KEY );
 			delete_post_meta( $post->ID, self::FONTS_META_KEY );
 
@@ -345,12 +363,19 @@ class DTG_Batch_Processor {
 			update_post_meta( $post_id, '_wpb_shortcodes_custom_css', $css_backup );
 		}
 
+		// Restore WPBakery post custom CSS.
+		$post_css_backup = get_post_meta( $post_id, '_dtg_wpb_post_css_backup', true );
+		if ( $post_css_backup ) {
+			update_post_meta( $post_id, '_wpb_post_custom_css', $post_css_backup );
+		}
+
 		// Restore WPBakery status.
 		update_post_meta( $post_id, '_wpb_vc_js_status', 'true' );
 
 		// Clean up converter meta.
 		delete_post_meta( $post_id, self::BACKUP_META_KEY );
 		delete_post_meta( $post_id, self::CSS_BACKUP_META_KEY );
+		delete_post_meta( $post_id, '_dtg_wpb_post_css_backup' );
 		delete_post_meta( $post_id, self::CONVERTED_META_KEY );
 		delete_post_meta( $post_id, self::CSS_META_KEY );
 		delete_post_meta( $post_id, self::FONTS_META_KEY );

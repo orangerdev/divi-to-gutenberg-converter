@@ -74,6 +74,7 @@ class DTG_Converter_Text extends DTG_Converter_Base {
 		// Parse CSS and alignment.
 		$css_attr  = $this->get_attr( $attrs, 'css', '' );
 		$vc_css    = $this->parse_vc_css( $css_attr );
+		$vc_class  = $this->extract_vc_class( $css_attr );
 		$align     = $this->get_attr( $attrs, 'align', '' );
 		$el_class  = $this->get_attr( $attrs, 'el_class', '' );
 
@@ -92,6 +93,9 @@ class DTG_Converter_Text extends DTG_Converter_Base {
 		}
 
 		$class_list = $css_class;
+		if ( $vc_class ) {
+			$class_list = trim( $class_list . ' ' . $vc_class );
+		}
 		if ( $el_class ) {
 			$class_list = trim( $class_list . ' ' . $el_class );
 		}
@@ -168,6 +172,7 @@ class DTG_Converter_Text extends DTG_Converter_Base {
 		// Parse vc_custom_heading css attribute.
 		$css_attr = $this->get_attr( $attrs, 'css', '' );
 		$vc_css   = $this->parse_vc_css( $css_attr );
+		$vc_class = $this->extract_vc_class( $css_attr );
 		if ( ! empty( $vc_css ) ) {
 			$css_declarations = array_merge( $css_declarations, $vc_css );
 		}
@@ -179,6 +184,12 @@ class DTG_Converter_Text extends DTG_Converter_Base {
 			$this->add_css( $css_class, $css_declarations );
 		}
 
+		// Preserve WPBakery vc_custom class.
+		if ( $vc_class ) {
+			$css_class = trim( $css_class . ' ' . $vc_class );
+		}
+
+		$text = $this->strip_block_wrapper_tags( $text );
 		$text = $this->esc_block_text( $text );
 
 		// Link.
@@ -238,6 +249,17 @@ class DTG_Converter_Text extends DTG_Converter_Base {
 		return $output;
 	}
 
+	/**
+	 * Convert mk_fancy_title to wp:heading.
+	 *
+	 * Mirrors Jupiter Donut rendering exactly:
+	 * - font-size, text-align, font-style, font-weight always written
+	 * - margin_top → padding-top, margin_bottom → padding-bottom (Jupiter behavior)
+	 * - letter_spacing, txt_transform written when non-empty
+	 * - line_height written when not 100
+	 * - responsive_align → mobile media query
+	 * - force_font_size → responsive breakpoints (smallscreen, tablet, phone)
+	 */
 	private function convert_mk_heading( $node ) {
 		$attrs = isset( $node['attrs'] ) ? $node['attrs'] : [];
 
@@ -262,50 +284,68 @@ class DTG_Converter_Text extends DTG_Converter_Base {
 			$level = 2;
 		}
 
-		$text_align = $this->get_attr( $attrs, 'align', '' );
+		// Read all attributes with Jupiter Donut defaults from config.php.
+		$text_align       = $this->get_attr( $attrs, 'align', 'left' );
+		$color            = $this->get_attr( $attrs, 'color', '' );
+		$color_style      = $this->get_attr( $attrs, 'color_style', 'single_color' );
+		$size             = $this->get_attr( $attrs, 'size', '14' );
+		$force_font_size  = $this->get_attr( $attrs, 'force_font_size', 'false' );
+		$font_weight      = $this->get_attr( $attrs, 'font_weight', 'inherit' );
+		$font_style       = $this->get_attr( $attrs, 'font_style', 'inherit' );
+		$txt_transform    = $this->get_attr( $attrs, 'txt_transform', 'initial' );
+		$letter_spacing   = $this->get_attr( $attrs, 'letter_spacing', '0' );
+		$line_height      = $this->get_attr( $attrs, 'line_height', '100' );
+		$margin_top       = $this->get_attr( $attrs, 'margin_top', '0' );
+		$margin_bottom    = $this->get_attr( $attrs, 'margin_bottom', '20' );
+		$responsive_align = $this->get_attr( $attrs, 'responsive_align', 'center' );
+		$visibility       = $this->get_attr( $attrs, 'visibility', '' );
+		$el_class         = $this->get_attr( $attrs, 'el_class', '' );
 
-		// Collect CSS declarations from mk_fancy_title attributes.
+		// Responsive font sizes (only used when force_font_size = true).
+		$size_smallscreen = $this->get_attr( $attrs, 'size_smallscreen', '0' );
+		$size_tablet      = $this->get_attr( $attrs, 'size_tablet', '0' );
+		$size_phone       = $this->get_attr( $attrs, 'size_phone', '36' );
+
+		// Build CSS declarations matching Jupiter Donut mk_fancy_title.php lines 20-32.
 		$css_declarations = [];
-		$responsive_css   = [];
 
-		$color = $this->get_attr( $attrs, 'color', '' );
-		if ( $color ) {
-			$css_declarations['color'] = $color;
+		// letter-spacing (only if non-empty).
+		if ( '' !== $letter_spacing ) {
+			$css_declarations['letter-spacing'] = $letter_spacing . 'px';
 		}
 
-		$size = $this->get_attr( $attrs, 'size', '' );
-		if ( $size ) {
-			$css_declarations['font-size'] = $this->ensure_px( $size );
-		}
-
-		if ( $text_align ) {
-			$css_declarations['text-align'] = $text_align;
-		}
-
-		$font_weight = $this->get_attr( $attrs, 'font_weight', '' );
-		if ( $font_weight && 'inherit' !== $font_weight ) {
-			$css_declarations['font-weight'] = $font_weight;
-		}
-
-		$txt_transform = $this->get_attr( $attrs, 'txt_transform', '' );
-		if ( $txt_transform && 'initial' !== $txt_transform && 'none' !== $txt_transform ) {
+		// text-transform (only if non-empty).
+		if ( '' !== $txt_transform ) {
 			$css_declarations['text-transform'] = $txt_transform;
 		}
 
-		$letter_spacing = $this->get_attr( $attrs, 'letter_spacing', '' );
-		if ( $letter_spacing && '0' !== $letter_spacing ) {
-			$css_declarations['letter-spacing'] = $this->ensure_px( $letter_spacing );
+		// font-size always written.
+		$css_declarations['font-size'] = $size . 'px';
+
+		// line-height (only if not 100).
+		if ( '100' !== $line_height ) {
+			$css_declarations['line-height'] = $line_height . '%';
 		}
 
-		$margin_top = $this->get_attr( $attrs, 'margin_top', '' );
-		if ( $margin_top && '0' !== $margin_top ) {
-			$css_declarations['margin-top'] = $this->ensure_px( $margin_top );
+		// color (only if not gradient).
+		if ( 'gradient_color' !== $color_style && $color ) {
+			$css_declarations['color'] = $color;
 		}
 
-		$margin_bottom = $this->get_attr( $attrs, 'margin_bottom', '' );
-		if ( '' !== $margin_bottom ) {
-			$css_declarations['padding-bottom'] = $this->ensure_px( $margin_bottom );
-		}
+		// text-align always written.
+		$css_declarations['text-align'] = $text_align;
+
+		// font-style always written.
+		$css_declarations['font-style'] = $font_style;
+
+		// font-weight always written.
+		$css_declarations['font-weight'] = $font_weight;
+
+		// margin_top → padding-top (Jupiter Donut behavior).
+		$css_declarations['padding-top'] = $margin_top . 'px';
+
+		// margin_bottom → padding-bottom (Jupiter Donut behavior).
+		$css_declarations['padding-bottom'] = $margin_bottom . 'px';
 
 		// Font family.
 		$font_family = $this->get_attr( $attrs, 'font_family', 'none' );
@@ -319,26 +359,44 @@ class DTG_Converter_Text extends DTG_Converter_Base {
 			}
 		}
 
-		// Responsive font size.
-		$size_phone = $this->get_attr( $attrs, 'size_phone', '' );
-		if ( $size_phone ) {
-			$responsive_css['font-size'] = $this->ensure_px( $size_phone );
+		// Generate CSS class — always has declarations.
+		$css_class = $this->next_class();
+		$this->add_css( $css_class, $css_declarations );
+
+		// Responsive align: mobile media query.
+		if ( $responsive_align ) {
+			$this->add_css_responsive( $css_class, [
+				'text-align' => $responsive_align . ' !important',
+			] );
 		}
 
-		// Generate CSS class.
-		$css_class = '';
-		if ( ! empty( $css_declarations ) ) {
-			$css_class = $this->next_class();
-			$this->add_css( $css_class, $css_declarations );
-
-			if ( ! empty( $responsive_css ) ) {
+		// force_font_size responsive breakpoints.
+		if ( 'true' === $force_font_size ) {
+			if ( '0' !== $size_smallscreen && '' !== $size_smallscreen ) {
 				$this->builder->add_css(
-					'@media (max-width: 767px) { .' . $css_class . ' }',
-					$responsive_css
+					'@media (max-width: 1280px) { .' . $css_class,
+					[ 'font-size' => $size_smallscreen . 'px' ]
 				);
+			}
+			if ( '0' !== $size_tablet && '' !== $size_tablet ) {
+				$this->builder->add_css(
+					'@media (min-width: 768px) and (max-width: 1024px) { .' . $css_class,
+					[ 'font-size' => $size_tablet . 'px' ]
+				);
+			}
+			if ( '0' !== $size_phone && '' !== $size_phone ) {
+				$this->add_css_responsive( $css_class, [
+					'font-size' => $size_phone . 'px',
+				] );
 			}
 		}
 
+		// Visibility handling.
+		if ( $visibility ) {
+			$this->apply_visibility( $css_class, $visibility );
+		}
+
+		// Build block.
 		$block_attrs = [];
 		if ( 2 !== $level ) {
 			$block_attrs['level'] = $level;
@@ -346,17 +404,20 @@ class DTG_Converter_Text extends DTG_Converter_Base {
 		if ( $text_align && 'left' !== $text_align ) {
 			$block_attrs['textAlign'] = $text_align;
 		}
-		if ( $css_class ) {
-			$block_attrs['className'] = $css_class;
+
+		$class_list = $css_class;
+		if ( $el_class ) {
+			$class_list = trim( $class_list . ' ' . $el_class );
 		}
+		$block_attrs['className'] = $class_list;
 
 		$tag         = 'h' . $level;
+		$content     = $this->strip_block_wrapper_tags( $content );
 		$content     = $this->esc_block_text( $content );
 		$align_class = ( $text_align && 'left' !== $text_align ) ? ' has-text-align-' . esc_attr( $text_align ) : '';
-		$extra_class = $css_class ? ' ' . esc_attr( $css_class ) : '';
 
 		$output  = '<!-- wp:heading' . $this->json_attrs( $block_attrs ) . ' -->' . "\n";
-		$output .= '<' . $tag . ' class="wp-block-heading' . $align_class . $extra_class . '">' . $content . '</' . $tag . '>' . "\n";
+		$output .= '<' . $tag . ' class="wp-block-heading' . $align_class . ' ' . esc_attr( $class_list ) . '">' . $content . '</' . $tag . '>' . "\n";
 		$output .= '<!-- /wp:heading -->' . "\n\n";
 
 		return $output;
@@ -401,7 +462,8 @@ class DTG_Converter_Text extends DTG_Converter_Base {
 			$items   = array_filter( array_map( 'trim', $items ) );
 			$content = '';
 			foreach ( $items as $item ) {
-				$content .= '<li>' . $this->esc_block_text( $item ) . '</li>';
+				// Preserve inline HTML (strong, span style, a tags) for styling.
+				$content .= '<li>' . $item . '</li>';
 			}
 		}
 
@@ -411,6 +473,7 @@ class DTG_Converter_Text extends DTG_Converter_Base {
 		$margin_bottom    = $this->get_attr( $attrs, 'margin_bottom', '' );
 		$align            = $this->get_attr( $attrs, 'align', '' );
 		$el_class         = $this->get_attr( $attrs, 'el_class', '' );
+		$list_style       = $this->get_attr( $attrs, 'style', '' );
 
 		if ( $icon_color ) {
 			$css_declarations['list-style'] = 'none';
@@ -424,8 +487,18 @@ class DTG_Converter_Text extends DTG_Converter_Base {
 			$css_declarations['text-align'] = $align;
 		}
 
-		$css_class       = '';
-		$marker_css      = [];
+		// Map Jupiter icon style names to Unicode characters.
+		$style_map = [
+			'mk-moon-circle-small'  => '"\\25CF"',
+			'mk-moon-checkmark'     => '"\\2713"',
+			'mk-moon-arrow-right-2' => '"\\25B6"',
+			'mk-moon-arrow-right-5' => '"\\2192"',
+			'mk-icon-check'         => '"\\2713"',
+			'mk-li-check'           => '"\\2713"',
+		];
+		$bullet_content = isset( $style_map[ $list_style ] ) ? $style_map[ $list_style ] : '"\\2022"';
+
+		$css_class = '';
 
 		if ( ! empty( $css_declarations ) || $icon_color ) {
 			$css_class = $this->next_class();
@@ -433,7 +506,7 @@ class DTG_Converter_Text extends DTG_Converter_Base {
 
 			if ( $icon_color ) {
 				$this->builder->add_css( '.' . $css_class . ' li::before', [
-					'content'      => '"\\2022"',
+					'content'      => $bullet_content,
 					'color'        => $icon_color,
 					'font-weight'  => 'bold',
 					'margin-right' => '0.5em',

@@ -77,6 +77,23 @@ abstract class DTG_Converter_Base {
 	}
 
 	/**
+	 * Extract the vc_custom_* class name from a WPBakery css attribute.
+	 * Format: ".vc_custom_1692656486572{...}" → "vc_custom_1692656486572"
+	 *
+	 * @param string $css_attr The WPBakery css attribute value.
+	 * @return string The extracted class name, or empty string.
+	 */
+	protected function extract_vc_class( $css_attr ) {
+		if ( empty( $css_attr ) ) {
+			return '';
+		}
+		if ( preg_match( '/\.(vc_custom_\d+)/', $css_attr, $m ) ) {
+			return $m[1];
+		}
+		return '';
+	}
+
+	/**
 	 * Parse WPBakery css attribute.
 	 * Format: ".vc_custom_xxx{margin-bottom: 0px !important;}"
 	 *
@@ -99,12 +116,13 @@ abstract class DTG_Converter_Base {
 
 				$kv = explode( ':', $part, 2 );
 				if ( count( $kv ) === 2 ) {
-					$prop  = trim( $kv[0] );
-					$value = trim( str_replace( '!important', '', $kv[1] ) );
-					$value = trim( $value );
+					$prop      = trim( $kv[0] );
+					$raw_value = trim( $kv[1] );
+					$important = ( false !== strpos( $raw_value, '!important' ) );
+					$value     = trim( str_replace( '!important', '', $raw_value ) );
 
 					if ( '' !== $value ) {
-						$declarations[ $prop ] = $value;
+						$declarations[ $prop ] = $value . ( $important ? ' !important' : '' );
 					}
 				}
 			}
@@ -251,6 +269,19 @@ abstract class DTG_Converter_Base {
 		return wp_kses_post( $text );
 	}
 
+	/**
+	 * Strip wrapping block-level tags (p, div) from text intended for inline use
+	 * inside heading elements. Preserves the inner HTML content.
+	 */
+	protected function strip_block_wrapper_tags( $text ) {
+		$text = trim( $text );
+		// Repeatedly unwrap outermost <p> or <div> tags.
+		while ( preg_match( '/^\s*<(p|div)(\s[^>]*)?>(.+)<\/\1>\s*$/is', $text, $m ) ) {
+			$text = trim( $m[3] );
+		}
+		return $text;
+	}
+
 	protected function json_attrs( $attrs ) {
 		$attrs = array_filter( $attrs, function( $v ) {
 			return '' !== $v && null !== $v;
@@ -271,5 +302,47 @@ abstract class DTG_Converter_Base {
 			return $value . 'px';
 		}
 		return $value;
+	}
+
+	/**
+	 * Apply visibility CSS rules for responsive show/hide.
+	 *
+	 * @param string $css_class The CSS class to target.
+	 * @param string $visibility Visibility value (visible-dt, hidden-dt, visible-sm, hidden-sm).
+	 */
+	protected function apply_visibility( $css_class, $visibility ) {
+		if ( ! $this->builder || empty( $css_class ) ) {
+			return;
+		}
+
+		switch ( $visibility ) {
+			case 'visible-dt':
+				// Desktop only: hide on mobile.
+				$this->add_css_responsive( $css_class, [ 'display' => 'none !important' ] );
+				break;
+
+			case 'hidden-dt':
+				// Mobile only: hide on desktop, show on mobile.
+				$this->add_css( $css_class, [ 'display' => 'none' ] );
+				$this->builder->add_css(
+					'@media (max-width: 767px) { .' . $css_class,
+					[ 'display' => 'block !important' ]
+				);
+				break;
+
+			case 'visible-sm':
+				// Small screens only.
+				$this->add_css( $css_class, [ 'display' => 'none' ] );
+				$this->builder->add_css(
+					'@media (max-width: 767px) { .' . $css_class,
+					[ 'display' => 'block !important' ]
+				);
+				break;
+
+			case 'hidden-sm':
+				// Hide on small screens.
+				$this->add_css_responsive( $css_class, [ 'display' => 'none !important' ] );
+				break;
+		}
 	}
 }

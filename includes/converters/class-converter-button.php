@@ -79,9 +79,15 @@ class DTG_Converter_Button extends DTG_Converter_Base {
 			$text = $this->get_attr( $attrs, 'text', 'Button' );
 		}
 
-		$url    = $this->get_attr( $attrs, 'url', '' );
-		$target = $this->get_attr( $attrs, 'target', '_self' );
-		$align  = $this->get_attr( $attrs, 'align', '' );
+		$url        = $this->get_attr( $attrs, 'url', '' );
+		$target     = $this->get_attr( $attrs, 'target', '_self' );
+		$align      = $this->get_attr( $attrs, 'align', '' );
+		$product_id = $this->get_attr( $attrs, 'product_id', '' );
+
+		// WooCommerce product button: generate add-to-cart URL.
+		if ( $product_id && empty( $url ) ) {
+			$url = '?add-to-cart=' . $product_id;
+		}
 
 		$link_data = [
 			'url'    => $url,
@@ -131,10 +137,35 @@ class DTG_Converter_Button extends DTG_Converter_Base {
 			$css_declarations['color']             = $border_color;
 		}
 
+		// Button size.
+		$size     = $this->get_attr( $attrs, 'size', '' );
+		$size_map = [
+			'small'   => [ 'padding' => '7px 20px',  'font-size' => '12px' ],
+			'medium'  => [ 'padding' => '10px 26px', 'font-size' => '14px' ],
+			'large'   => [ 'padding' => '15px 35px', 'font-size' => '16px' ],
+			'x-large' => [ 'padding' => '20px 50px', 'font-size' => '18px' ],
+		];
+		if ( $size && isset( $size_map[ $size ] ) ) {
+			$css_declarations['padding']   = $size_map[ $size ]['padding'];
+			$css_declarations['font-size'] = $size_map[ $size ]['font-size'];
+		}
+
 		$margin_bottom = $this->get_attr( $attrs, 'margin_bottom', '' );
-		if ( $margin_bottom && '0' !== $margin_bottom ) {
+		if ( '' !== $margin_bottom ) {
 			$css_declarations['margin-bottom'] = $this->ensure_px( $margin_bottom );
 		}
+
+		$margin_right = $this->get_attr( $attrs, 'margin_right', '' );
+		if ( '' !== $margin_right ) {
+			$css_declarations['margin-right'] = $this->ensure_px( $margin_right );
+		}
+
+		// Standard mk_button typography.
+		$css_declarations['font-weight']     = '700';
+		$css_declarations['letter-spacing']  = '2px';
+		$css_declarations['text-transform']  = 'uppercase';
+		$css_declarations['display']         = 'inline-block';
+		$css_declarations['text-decoration'] = 'none';
 
 		$css_class = '';
 		if ( ! empty( $css_declarations ) ) {
@@ -145,10 +176,10 @@ class DTG_Converter_Button extends DTG_Converter_Base {
 			}
 		}
 
-		return $this->build_button_block( $text, $link_data, $align, $css_class );
+		return $this->build_button_block( $text, $link_data, $align, $css_class, $product_id );
 	}
 
-	private function build_button_block( $text, $link_data = [], $align = '', $css_class = '' ) {
+	private function build_button_block( $text, $link_data = [], $align = '', $css_class = '', $product_id = '' ) {
 		$text = $this->esc_block_text( $text );
 		if ( empty( $text ) ) {
 			$text = 'Button';
@@ -196,12 +227,19 @@ class DTG_Converter_Button extends DTG_Converter_Base {
 			$btn_class .= ' ' . esc_attr( $css_class );
 		}
 
+		// WooCommerce product button attributes.
+		$wc_attrs = '';
+		if ( $product_id ) {
+			$btn_class .= ' add_to_cart_button ajax_add_to_cart';
+			$wc_attrs   = ' data-quantity="1" data-product_id="' . esc_attr( $product_id ) . '"';
+		}
+
 		$output  = '<!-- wp:buttons' . $this->json_attrs( $buttons_attrs ) . ' -->' . "\n";
 		$output .= '<div class="wp-block-buttons">';
 
 		$output .= '<!-- wp:button' . $this->json_attrs( $button_attrs ) . ' -->' . "\n";
 		$output .= '<div class="wp-block-button">';
-		$output .= '<a class="' . $btn_class . '"' . $href_attr . '>' . $text . '</a>';
+		$output .= '<a class="' . $btn_class . '"' . $href_attr . $wc_attrs . '>' . $text . '</a>';
 		$output .= '</div>' . "\n";
 		$output .= '<!-- /wp:button -->';
 

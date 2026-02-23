@@ -56,8 +56,11 @@ class DTG_Converter_Layout extends DTG_Converter_Base {
 		// CSS from vc_row css attribute.
 		$css_attr     = $this->get_attr( $attrs, 'css', '' );
 		$vc_css       = $this->parse_vc_css( $css_attr );
+		$vc_class     = $this->extract_vc_class( $css_attr );
 		$fullwidth    = $this->get_attr( $attrs, 'fullwidth', '' );
 		$el_class     = $this->get_attr( $attrs, 'el_class', '' );
+		$row_id       = $this->get_attr( $attrs, 'id', '' );
+		$visibility   = $this->get_attr( $attrs, 'visibility', '' );
 		$css_class    = '';
 		$extra_styles = [];
 
@@ -66,13 +69,51 @@ class DTG_Converter_Layout extends DTG_Converter_Base {
 			$extra_styles = array_merge( $extra_styles, $vc_css );
 		}
 
+		// Sanitize excessive horizontal values (WPBakery fullwidth hack).
+		if ( 'true' === $fullwidth ) {
+			$horizontal_props = [ 'margin-left', 'margin-right', 'padding-left', 'padding-right', 'border-left-width', 'border-right-width' ];
+			foreach ( $horizontal_props as $prop ) {
+				if ( isset( $extra_styles[ $prop ] ) ) {
+					$val = (int) $extra_styles[ $prop ];
+					if ( abs( $val ) > 100 ) {
+						unset( $extra_styles[ $prop ] );
+					}
+				}
+			}
+
+			// Add content constraint for fullwidth_content="false".
+			$fullwidth_content = $this->get_attr( $attrs, 'fullwidth_content', '' );
+			if ( 'false' === $fullwidth_content ) {
+				$extra_styles['max-width']     = '1140px';
+				$extra_styles['margin-left']   = 'auto';
+				$extra_styles['margin-right']  = 'auto';
+			}
+		}
+
+		// Column gap from column_padding.
+		$column_padding = $this->get_attr( $attrs, 'column_padding', '' );
+		if ( $column_padding && '0' !== $column_padding ) {
+			$extra_styles['gap'] = $this->ensure_px( $column_padding );
+		}
+
 		// Generate CSS class if needed.
 		if ( ! empty( $extra_styles ) ) {
 			$css_class = $this->next_class();
 			$this->add_css( $css_class, $extra_styles );
 		}
 
+		// Visibility handling (responsive show/hide).
+		if ( $visibility ) {
+			if ( empty( $css_class ) ) {
+				$css_class = $this->next_class();
+			}
+			$this->apply_visibility( $css_class, $visibility );
+		}
+
 		$class_list = $css_class;
+		if ( $vc_class ) {
+			$class_list = trim( $class_list . ' ' . $vc_class );
+		}
 		if ( $el_class ) {
 			$class_list = trim( $class_list . ' ' . $el_class );
 		}
@@ -87,14 +128,19 @@ class DTG_Converter_Layout extends DTG_Converter_Base {
 			if ( $class_list ) {
 				$block_attrs['className'] = $class_list;
 			}
+			if ( $row_id ) {
+				$block_attrs['anchor'] = $row_id;
+			}
 
 			$div_class = 'wp-block-group';
 			if ( $class_list ) {
 				$div_class .= ' ' . esc_attr( $class_list );
 			}
 
+			$id_attr = $row_id ? ' id="' . esc_attr( $row_id ) . '"' : '';
+
 			$output  = '<!-- wp:group' . $this->json_attrs( $block_attrs ) . ' -->' . "\n";
-			$output .= '<div class="' . $div_class . '">';
+			$output .= '<div class="' . $div_class . '"' . $id_attr . '>';
 			$output .= $inner_content;
 			$output .= '</div>' . "\n";
 			$output .= '<!-- /wp:group -->' . "\n\n";
@@ -107,14 +153,19 @@ class DTG_Converter_Layout extends DTG_Converter_Base {
 		if ( $class_list ) {
 			$block_attrs['className'] = $class_list;
 		}
+		if ( $row_id ) {
+			$block_attrs['anchor'] = $row_id;
+		}
 
 		$div_class = 'wp-block-columns';
 		if ( $class_list ) {
 			$div_class .= ' ' . esc_attr( $class_list );
 		}
 
+		$id_attr = $row_id ? ' id="' . esc_attr( $row_id ) . '"' : '';
+
 		$output  = '<!-- wp:columns' . $this->json_attrs( $block_attrs ) . ' -->' . "\n";
-		$output .= '<div class="' . $div_class . '">';
+		$output .= '<div class="' . $div_class . '"' . $id_attr . '>';
 		$output .= $inner_content;
 		$output .= '</div>' . "\n";
 		$output .= '<!-- /wp:columns -->' . "\n\n";
@@ -141,6 +192,7 @@ class DTG_Converter_Layout extends DTG_Converter_Base {
 
 		// CSS from vc_column css attribute.
 		$vc_css    = $this->parse_vc_css( $css_attr );
+		$vc_class  = $this->extract_vc_class( $css_attr );
 		$css_class = '';
 
 		if ( ! empty( $vc_css ) ) {
@@ -149,6 +201,9 @@ class DTG_Converter_Layout extends DTG_Converter_Base {
 		}
 
 		$class_list = $css_class;
+		if ( $vc_class ) {
+			$class_list = trim( $class_list . ' ' . $vc_class );
+		}
 		if ( $el_class ) {
 			$class_list = trim( $class_list . ' ' . $el_class );
 		}
@@ -186,9 +241,16 @@ class DTG_Converter_Layout extends DTG_Converter_Base {
 			$block_attrs['align'] = 'full';
 		}
 
+		// Section ID for anchor links.
+		$section_id = $this->get_attr( $attrs, 'section_id', '' );
+		if ( $section_id ) {
+			$block_attrs['anchor'] = $section_id;
+		}
+
 		// Collect CSS for section.
 		$css_declarations = [];
 		$el_class         = $this->get_attr( $attrs, 'el_class', '' );
+		$visibility       = $this->get_attr( $attrs, 'visibility', '' );
 
 		$bg_color = $this->get_attr( $attrs, 'bg_color', '' );
 		if ( $bg_color ) {
@@ -197,12 +259,17 @@ class DTG_Converter_Layout extends DTG_Converter_Base {
 
 		$bg_image = $this->get_attr( $attrs, 'bg_image', '' );
 		if ( $bg_image ) {
-			$css_declarations['background-image'] = 'url(' . $bg_image . ')';
+			$css_declarations['background-image']    = 'url(' . $bg_image . ')';
+			$css_declarations['position']            = 'relative';
+			$css_declarations['overflow']             = 'hidden';
 		}
 
 		$bg_position = $this->get_attr( $attrs, 'bg_position', '' );
 		if ( $bg_position ) {
 			$css_declarations['background-position'] = $bg_position;
+		} elseif ( $bg_image ) {
+			// Default background-position when bg_image is set.
+			$css_declarations['background-position'] = 'center center';
 		}
 
 		$bg_repeat = $this->get_attr( $attrs, 'bg_repeat', '' );
@@ -227,7 +294,13 @@ class DTG_Converter_Layout extends DTG_Converter_Base {
 
 		$padding_bottom = $this->get_attr( $attrs, 'padding_bottom', '' );
 		if ( '' !== $padding_bottom ) {
-			$css_declarations['padding-bottom'] = $this->ensure_px( $padding_bottom );
+			$pb_val = (int) $padding_bottom;
+			if ( $pb_val < 0 ) {
+				// Negative padding is invalid CSS — convert to margin-bottom overlap.
+				$css_declarations['margin-bottom'] = $pb_val . 'px';
+			} else {
+				$css_declarations['padding-bottom'] = $this->ensure_px( $padding_bottom );
+			}
 		}
 
 		$vertical_align = $this->get_attr( $attrs, 'vertical_align', '' );
@@ -259,10 +332,29 @@ class DTG_Converter_Layout extends DTG_Converter_Base {
 					'pointer-events'   => 'none',
 				] );
 				// Ensure section is positioned for the overlay.
-				$css_declarations['position'] = 'relative';
-				// Update the rule.
 				$this->add_css( $css_class, [ 'position' => 'relative' ] );
 			}
+		}
+
+		// Responsive background image for portrait/mobile.
+		$bg_image_portrait = $this->get_attr( $attrs, 'bg_image_portrait', '' );
+		if ( $bg_image_portrait ) {
+			if ( empty( $css_class ) ) {
+				$css_class = $this->next_class();
+				$this->add_css( $css_class, $css_declarations );
+			}
+			$this->builder->add_css(
+				'@media (max-width: 767px) { .' . $css_class,
+				[ 'background-image' => 'url(' . $bg_image_portrait . ') !important' ]
+			);
+		}
+
+		// Visibility handling (responsive show/hide).
+		if ( $visibility ) {
+			if ( empty( $css_class ) ) {
+				$css_class = $this->next_class();
+			}
+			$this->apply_visibility( $css_class, $visibility );
 		}
 
 		$class_list = $css_class;
@@ -273,7 +365,19 @@ class DTG_Converter_Layout extends DTG_Converter_Base {
 			$block_attrs['className'] = $class_list;
 		}
 
-		$inner_content = $this->convert_children( isset( $node['children'] ) ? $node['children'] : [] );
+		$children = isset( $node['children'] ) ? $node['children'] : [];
+
+		// Auto-wrap multiple vc_column children in wp:columns.
+		$column_children = array_filter( $children, function( $child ) {
+			return 'shortcode' === $child['type']
+				&& in_array( $child['tag'], [ 'vc_column', 'vc_column_inner' ], true );
+		});
+
+		if ( count( $column_children ) > 1 ) {
+			$inner_content = $this->wrap_columns_in_section( $children );
+		} else {
+			$inner_content = $this->convert_children( $children );
+		}
 
 		$div_class = 'wp-block-group';
 		if ( ! empty( $block_attrs['align'] ) ) {
@@ -283,11 +387,64 @@ class DTG_Converter_Layout extends DTG_Converter_Base {
 			$div_class .= ' ' . esc_attr( $class_list );
 		}
 
+		$id_attr = $section_id ? ' id="' . esc_attr( $section_id ) . '"' : '';
+
 		$output  = '<!-- wp:group' . $this->json_attrs( $block_attrs ) . ' -->' . "\n";
-		$output .= '<div class="' . $div_class . '">';
+		$output .= '<div class="' . $div_class . '"' . $id_attr . '>';
 		$output .= $inner_content;
 		$output .= '</div>' . "\n";
 		$output .= '<!-- /wp:group -->' . "\n\n";
+
+		return $output;
+	}
+
+	/**
+	 * Wrap consecutive vc_column children in wp:columns blocks.
+	 * Non-column children are rendered as standalone blocks between column groups.
+	 */
+	private function wrap_columns_in_section( $children ) {
+		$output        = '';
+		$column_buffer = [];
+
+		foreach ( $children as $child ) {
+			$is_column = ( 'shortcode' === $child['type']
+				&& in_array( $child['tag'], [ 'vc_column', 'vc_column_inner' ], true ) );
+
+			if ( $is_column ) {
+				$column_buffer[] = $child;
+			} else {
+				// Flush any buffered columns as a wp:columns block.
+				if ( ! empty( $column_buffer ) ) {
+					$output       .= $this->build_columns_block( $column_buffer );
+					$column_buffer = [];
+				}
+				// Render non-column child normally.
+				$output .= $this->convert_children( [ $child ] );
+			}
+		}
+
+		// Flush remaining columns.
+		if ( ! empty( $column_buffer ) ) {
+			$output .= $this->build_columns_block( $column_buffer );
+		}
+
+		return $output;
+	}
+
+	/**
+	 * Build a wp:columns block from an array of column child nodes.
+	 */
+	private function build_columns_block( $column_nodes ) {
+		$inner = '';
+		foreach ( $column_nodes as $col ) {
+			$inner .= $this->convert_children( [ $col ] );
+		}
+
+		$output  = '<!-- wp:columns -->' . "\n";
+		$output .= '<div class="wp-block-columns">';
+		$output .= $inner;
+		$output .= '</div>' . "\n";
+		$output .= '<!-- /wp:columns -->' . "\n\n";
 
 		return $output;
 	}

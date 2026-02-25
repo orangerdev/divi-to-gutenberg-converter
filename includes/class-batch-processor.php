@@ -122,7 +122,7 @@ class DTG_Batch_Processor {
 
 		if ( ! $all_ok ) {
 			$failed_requirements = $requirements;
-			$missing = [];
+			$missing             = array();
 			foreach ( $requirements as $req ) {
 				if ( 'missing' === $req['status'] ) {
 					$missing[] = $req['name'] . ': ' . $req['hint'];
@@ -132,7 +132,7 @@ class DTG_Batch_Processor {
 			return false;
 		}
 
-		$this->classifier    = new DTG_Shortcode_Classifier();
+		$this->classifier     = new DTG_Shortcode_Classifier();
 		$this->render_capture = new DTG_Render_Capture();
 		$this->css_extractor  = new DTG_CSS_Extractor();
 
@@ -155,35 +155,35 @@ class DTG_Batch_Processor {
 	 * @return array[] Array of requirement arrays with keys: name, status ('ok'|'missing'), hint.
 	 */
 	public function check_hybrid_requirements() {
-		$requirements = [];
+		$requirements = array();
 
 		// 1. Jupiter theme.
-		$theme       = wp_get_theme();
-		$has_jupiter = ( 'jupiter' === strtolower( $theme->get_template() ) );
-		$requirements[] = [
+		$theme          = wp_get_theme();
+		$has_jupiter    = ( 'jupiter' === strtolower( $theme->get_template() ) );
+		$requirements[] = array(
 			'name'   => 'Jupiter Theme',
 			'status' => $has_jupiter ? 'ok' : 'missing',
 			'hint'   => $has_jupiter ? '' : 'Activate the Jupiter theme',
-		];
+		);
 
 		// 2. Jupiter Core plugin.
-		$has_core = class_exists( 'Jupiter_Core' );
-		$requirements[] = [
+		$has_core       = class_exists( 'Jupiter_Core' );
+		$requirements[] = array(
 			'name'   => 'Jupiter Core',
 			'status' => $has_core ? 'ok' : 'missing',
 			'hint'   => $has_core ? '' : 'Activate Jupiter Core plugin via Appearance > Install Plugins',
-		];
+		);
 
 		// 3. WPBakery Page Builder (Modified Version) — provides Vc_Manager.
-		$has_wpb = class_exists( 'Vc_Manager' );
-		$requirements[] = [
+		$has_wpb        = class_exists( 'Vc_Manager' );
+		$requirements[] = array(
 			'name'   => 'WPBakery Page Builder (Modified Version)',
 			'status' => $has_wpb ? 'ok' : 'missing',
 			'hint'   => $has_wpb ? '' : 'Install & activate via Appearance > Install Plugins (TGMPA)',
-		];
+		);
 
 		// 4. Jupiter Donut plugin (depends on WPBakery for initialization).
-		$has_jd = class_exists( 'Jupiter_Donut' );
+		$has_jd  = class_exists( 'Jupiter_Donut' );
 		$jd_hint = '';
 		if ( ! $has_jd ) {
 			if ( is_dir( WP_PLUGIN_DIR . '/jupiter-donut' ) ) {
@@ -194,21 +194,21 @@ class DTG_Batch_Processor {
 				$jd_hint = 'Install & activate via Appearance > Install Plugins';
 			}
 		}
-		$requirements[] = [
+		$requirements[] = array(
 			'name'   => 'Jupiter Donut',
 			'status' => $has_jd ? 'ok' : 'missing',
 			'hint'   => $jd_hint,
-		];
+		);
 
 		// 5. Shortcodes registered (ultimate proof everything is wired up).
-		//    During AJAX, WPBakery skips shortcode registration because is_admin()
-		//    returns true and template_redirect never fires. Force it manually.
+		// During AJAX, WPBakery skips shortcode registration because is_admin()
+		// returns true and template_redirect never fires. Force it manually.
 		if ( $has_wpb && $has_jd && class_exists( 'WPBMap' ) ) {
 			WPBMap::addAllMappedShortcodes();
 		}
 
 		$has_shortcodes = shortcode_exists( 'vc_row' ) || shortcode_exists( 'mk_page_section' );
-		$sc_hint = '';
+		$sc_hint        = '';
 		if ( ! $has_shortcodes ) {
 			if ( ! $has_wpb ) {
 				$sc_hint = 'Requires WPBakery to be active first';
@@ -218,11 +218,11 @@ class DTG_Batch_Processor {
 				$sc_hint = 'Plugins are active but shortcodes not registered — check for plugin errors';
 			}
 		}
-		$requirements[] = [
+		$requirements[] = array(
 			'name'   => 'Shortcodes Registered',
 			'status' => $has_shortcodes ? 'ok' : 'missing',
 			'hint'   => $sc_hint,
-		];
+		);
 
 		return $requirements;
 	}
@@ -244,14 +244,14 @@ class DTG_Batch_Processor {
 	public function scan_posts() {
 		global $wpdb;
 
-		$results = [
-			'total_posts'        => 0,
-			'posts_with_vc'      => 0,
-			'posts_with_mk'      => 0,
-			'already_converted'  => 0,
-			'posts'              => [],
-			'shortcode_inventory' => [],
-		];
+		$results = array(
+			'total_posts'         => 0,
+			'posts_with_vc'       => 0,
+			'posts_with_mk'       => 0,
+			'already_converted'   => 0,
+			'posts'               => array(),
+			'shortcode_inventory' => array(),
+		);
 
 		// Find all posts/pages with shortcodes.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -269,22 +269,22 @@ class DTG_Batch_Processor {
 		}
 
 		$results['total_posts'] = count( $posts );
-		$all_shortcodes         = [];
+		$all_shortcodes         = array();
 
 		foreach ( $posts as $post ) {
 			$has_vc = ( false !== strpos( $post->post_content, '[vc_' ) );
 			$has_mk = ( false !== strpos( $post->post_content, '[mk_' ) );
 
 			if ( $has_vc ) {
-				$results['posts_with_vc']++;
+				++$results['posts_with_vc'];
 			}
 			if ( $has_mk ) {
-				$results['posts_with_mk']++;
+				++$results['posts_with_mk'];
 			}
 
 			$is_converted = get_post_meta( $post->ID, self::CONVERTED_META_KEY, true );
 			if ( $is_converted ) {
-				$results['already_converted']++;
+				++$results['already_converted'];
 			}
 
 			// Analyze shortcodes in this post.
@@ -302,18 +302,17 @@ class DTG_Batch_Processor {
 				$post_link = get_edit_post_link( $post->ID );
 			}
 
-			$post_title = "<a href='{$post_link}' target='_blank'>{$post->post_title}</a>";
-
-			$results['posts'][] = [
+			$results['posts'][] = array(
 				'ID'          => $post->ID,
-				'post_title'  => $post_title,
+				'post_title'  => $post->post_title,
+				'post_link'   => $post_link,
 				'post_type'   => $post->post_type,
 				'post_status' => $post->post_status,
 				'has_vc'      => $has_vc,
 				'has_mk'      => $has_mk,
 				'converted'   => (bool) $is_converted,
 				'shortcodes'  => $shortcodes,
-			];
+			);
 		}
 
 		arsort( $all_shortcodes );
@@ -332,7 +331,7 @@ class DTG_Batch_Processor {
 		$post = get_post( $post_id );
 
 		if ( ! $post ) {
-			return [ 'error' => 'Post not found' ];
+			return array( 'error' => 'Post not found' );
 		}
 
 		$original = $post->post_content;
@@ -341,7 +340,7 @@ class DTG_Batch_Processor {
 		$converted = $this->builder->convert( $original );
 		$css       = $this->builder->get_google_fonts_css() . $this->builder->get_collected_css();
 
-		return [
+		return array(
 			'post_id'    => $post_id,
 			'post_title' => $post->post_title,
 			'post_type'  => $post->post_type,
@@ -349,7 +348,7 @@ class DTG_Batch_Processor {
 			'converted'  => $converted,
 			'css'        => $css,
 			'shortcodes' => $this->builder->analyze_shortcodes( $original ),
-		];
+		);
 	}
 
 	/**
@@ -362,13 +361,13 @@ class DTG_Batch_Processor {
 	public function process_batch( $offset = 0, $limit = 10 ) {
 		global $wpdb;
 
-		$results = [
+		$results = array(
 			'processed' => 0,
 			'skipped'   => 0,
 			'failed'    => 0,
-			'details'   => [],
+			'details'   => array(),
 			'has_more'  => false,
-		];
+		);
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$posts = $wpdb->get_results(
@@ -396,31 +395,31 @@ class DTG_Batch_Processor {
 		}
 
 		foreach ( $posts as $post ) {
-			$detail = [
+			$detail = array(
 				'ID'         => $post->ID,
 				'post_title' => $post->post_title,
 				'status'     => 'success',
 				'message'    => '',
-			];
+			);
 
 			// Skip already converted posts.
 			$is_converted = get_post_meta( $post->ID, self::CONVERTED_META_KEY, true );
 			if ( $is_converted ) {
 				$detail['status']  = 'skipped';
 				$detail['message'] = 'Already converted';
-				$results['skipped']++;
+				++$results['skipped'];
 				$results['details'][] = $detail;
 				continue;
 			}
 
 			try {
 				$this->convert_post( $post );
-				$results['processed']++;
+				++$results['processed'];
 				$detail['message'] = 'Converted successfully';
 			} catch ( Exception $e ) {
 				$detail['status']  = 'failed';
 				$detail['message'] = $e->getMessage();
-				$results['failed']++;
+				++$results['failed'];
 			}
 
 			$results['details'][] = $detail;
@@ -439,24 +438,33 @@ class DTG_Batch_Processor {
 		$post = get_post( $post_id );
 
 		if ( ! $post ) {
-			return [ 'status' => 'failed', 'message' => 'Post not found' ];
+			return array(
+				'status'  => 'failed',
+				'message' => 'Post not found',
+			);
 		}
 
 		// Skip already converted.
 		$is_converted = get_post_meta( $post_id, self::CONVERTED_META_KEY, true );
 		if ( $is_converted ) {
-			return [ 'status' => 'skipped', 'message' => 'Already converted on ' . $is_converted ];
+			return array(
+				'status'  => 'skipped',
+				'message' => 'Already converted on ' . $is_converted,
+			);
 		}
 
 		try {
 			$this->convert_post( $post );
-			return [
+			return array(
 				'status'  => 'success',
 				'message' => 'Converted successfully',
 				'css'     => $this->builder->get_collected_css(),
-			];
+			);
 		} catch ( Exception $e ) {
-			return [ 'status' => 'failed', 'message' => $e->getMessage() ];
+			return array(
+				'status'  => 'failed',
+				'message' => $e->getMessage(),
+			);
 		}
 	}
 
@@ -467,52 +475,52 @@ class DTG_Batch_Processor {
 	 * @return array Results with processed/skipped/failed counts and details.
 	 */
 	public function convert_selected_posts( $post_ids ) {
-		$results = [
+		$results = array(
 			'processed' => 0,
 			'skipped'   => 0,
 			'failed'    => 0,
-			'details'   => [],
-		];
+			'details'   => array(),
+		);
 
 		foreach ( $post_ids as $post_id ) {
 			$post = get_post( $post_id );
 
 			if ( ! $post ) {
-				$results['details'][] = [
+				$results['details'][] = array(
 					'ID'         => $post_id,
 					'post_title' => '(not found)',
 					'status'     => 'failed',
 					'message'    => 'Post not found',
-				];
-				$results['failed']++;
+				);
+				++$results['failed'];
 				continue;
 			}
 
-			$detail = [
+			$detail = array(
 				'ID'         => $post->ID,
 				'post_title' => $post->post_title,
 				'status'     => 'success',
 				'message'    => '',
-			];
+			);
 
 			// Skip already converted.
 			$is_converted = get_post_meta( $post->ID, self::CONVERTED_META_KEY, true );
 			if ( $is_converted ) {
 				$detail['status']  = 'skipped';
 				$detail['message'] = 'Already converted';
-				$results['skipped']++;
+				++$results['skipped'];
 				$results['details'][] = $detail;
 				continue;
 			}
 
 			try {
 				$this->convert_post( $post );
-				$results['processed']++;
+				++$results['processed'];
 				$detail['message'] = 'Converted successfully';
 			} catch ( Exception $e ) {
 				$detail['status']  = 'failed';
 				$detail['message'] = $e->getMessage();
-				$results['failed']++;
+				++$results['failed'];
 			}
 
 			$results['details'][] = $detail;
@@ -589,20 +597,20 @@ class DTG_Batch_Processor {
 
 		// 7. Update post content.
 		$result = wp_update_post(
-			[
+			array(
 				'ID'           => $post->ID,
 				'post_content' => $converted,
-			],
+			),
 			true
 		);
 
 		if ( is_wp_error( $result ) ) {
 			// Restore backup on failure.
 			wp_update_post(
-				[
+				array(
 					'ID'           => $post->ID,
 					'post_content' => $original,
-				]
+				)
 			);
 			delete_post_meta( $post->ID, self::BACKUP_META_KEY );
 			delete_post_meta( $post->ID, self::CSS_BACKUP_META_KEY );
@@ -637,10 +645,10 @@ class DTG_Batch_Processor {
 
 		// Restore content.
 		wp_update_post(
-			[
+			array(
 				'ID'           => $post_id,
 				'post_content' => $backup,
-			]
+			)
 		);
 
 		// Restore WPBakery CSS.
@@ -685,17 +693,17 @@ class DTG_Batch_Processor {
 			)
 		);
 
-		$results = [
+		$results = array(
 			'total'    => count( $post_ids ),
 			'restored' => 0,
 			'failed'   => 0,
-		];
+		);
 
 		foreach ( $post_ids as $post_id ) {
 			if ( $this->rollback_post( (int) $post_id ) ) {
-				$results['restored']++;
+				++$results['restored'];
 			} else {
-				$results['failed']++;
+				++$results['failed'];
 			}
 		}
 
@@ -750,14 +758,14 @@ class DTG_Batch_Processor {
 			)
 		);
 
-		$all_fonts = [];
+		$all_fonts = array();
 		if ( $font_rows ) {
 			foreach ( $font_rows as $row ) {
 				$fonts = maybe_unserialize( $row->meta_value );
 				if ( is_array( $fonts ) ) {
 					foreach ( $fonts as $family => $variants ) {
 						if ( ! isset( $all_fonts[ $family ] ) ) {
-							$all_fonts[ $family ] = [];
+							$all_fonts[ $family ] = array();
 						}
 						$all_fonts[ $family ] = array_unique( array_merge( $all_fonts[ $family ], (array) $variants ) );
 					}
@@ -766,12 +774,12 @@ class DTG_Batch_Processor {
 		}
 
 		// Build CSS file content.
-		$css = "/* DTG Converter - Auto-generated CSS */\n";
-		$css .= "/* Generated: " . current_time( 'mysql' ) . " */\n\n";
+		$css  = "/* DTG Converter - Auto-generated CSS */\n";
+		$css .= '/* Generated: ' . current_time( 'mysql' ) . " */\n\n";
 
 		// Google Fonts @import.
 		if ( ! empty( $all_fonts ) ) {
-			$families = [];
+			$families = array();
 			foreach ( $all_fonts as $family => $variants ) {
 				$families[] = str_replace( ' ', '+', $family ) . ':' . implode( ',', $variants );
 			}
@@ -788,10 +796,10 @@ class DTG_Batch_Processor {
 		// Write file.
 		$upload_dir = $this->get_upload_dir();
 		if ( ! $upload_dir ) {
-			return [
+			return array(
 				'success' => false,
 				'message' => 'Failed to create upload directory',
-			];
+			);
 		}
 
 		$file_path = $upload_dir . '/custom-styles.css';
@@ -799,21 +807,21 @@ class DTG_Batch_Processor {
 		$written = file_put_contents( $file_path, $css );
 
 		if ( false === $written ) {
-			return [
+			return array(
 				'success' => false,
 				'message' => 'Failed to write CSS file',
-			];
+			);
 		}
 
 		// Store file version for cache busting.
 		update_option( 'dtg_css_version', time() );
 
-		return [
-			'success'   => true,
-			'file_path' => $file_path,
-			'file_size' => size_format( strlen( $css ) ),
+		return array(
+			'success'    => true,
+			'file_path'  => $file_path,
+			'file_size'  => size_format( strlen( $css ) ),
 			'post_count' => $css_rows ? count( $css_rows ) : 0,
-		];
+		);
 	}
 
 	/**
@@ -864,10 +872,10 @@ class DTG_Batch_Processor {
 	 */
 	public function finalize_hybrid_css() {
 		if ( ! $this->hybrid_mode || ! $this->css_extractor ) {
-			return [
+			return array(
 				'success' => false,
 				'message' => 'Hybrid mode not enabled',
-			];
+			);
 		}
 
 		// Bundle full CSS from all source stylesheets (not selective extraction).

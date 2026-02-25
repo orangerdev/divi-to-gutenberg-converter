@@ -164,9 +164,51 @@ class DTG_Converter_Admin {
 				</div>
 			</div>
 
+			<!-- Convert Single Post Section -->
+			<div class="dtg-section" id="dtg-convert-single-section">
+				<h2><?php esc_html_e( 'Convert Single Post', 'dtg-converter' ); ?></h2>
+				<p><?php esc_html_e( 'Convert a specific post by ID. Useful for testing before running a full batch.', 'dtg-converter' ); ?></p>
+
+				<div class="dtg-preview-controls">
+					<label for="dtg-convert-single-post-id">
+						<?php esc_html_e( 'Post ID:', 'dtg-converter' ); ?>
+					</label>
+					<input type="number" id="dtg-convert-single-post-id" min="1" placeholder="64929" />
+					<label for="dtg-convert-single-mode">
+						<?php esc_html_e( 'Mode:', 'dtg-converter' ); ?>
+					</label>
+					<select id="dtg-convert-single-mode">
+						<option value="hybrid" selected><?php esc_html_e( 'Hybrid', 'dtg-converter' ); ?></option>
+						<option value="native"><?php esc_html_e( 'Native', 'dtg-converter' ); ?></option>
+					</select>
+					<button type="button" class="button button-primary" id="dtg-convert-single-btn">
+						<?php esc_html_e( 'Convert Post', 'dtg-converter' ); ?>
+					</button>
+					<span class="spinner" id="dtg-convert-single-spinner"></span>
+				</div>
+				<div id="dtg-convert-single-results" style="display:none; margin-top:10px;"></div>
+			</div>
+
 			<!-- Convert Section -->
 			<div class="dtg-section" id="dtg-convert-section">
-				<h2><?php esc_html_e( 'Step 3: Run Conversion', 'dtg-converter' ); ?></h2>
+				<h2><?php esc_html_e( 'Step 3: Run Batch Conversion', 'dtg-converter' ); ?></h2>
+
+				<!-- Hybrid Requirements Check -->
+				<div class="dtg-mode-selector" style="margin-bottom:15px; padding:12px; background:#f0f0f1; border-left:4px solid #2271b1;">
+					<p style="margin:0 0 8px;">
+						<strong><?php esc_html_e( 'Per-Post Mode Selection', 'dtg-converter' ); ?></strong>
+					</p>
+					<p class="description" style="margin:0 0 8px;">
+						<?php esc_html_e( 'Select posts and their conversion mode (Hybrid or Native) in the Posts Found table above. Hybrid mode requires Jupiter theme, Jupiter Core, WPBakery (Modified Version), and JupiterDonut to be active during conversion.', 'dtg-converter' ); ?>
+					</p>
+					<p style="margin-top:10px;">
+						<button type="button" class="button button-small" id="dtg-check-requirements-btn">
+							<?php esc_html_e( 'Check Hybrid Requirements', 'dtg-converter' ); ?>
+						</button>
+					</p>
+					<div id="dtg-requirements-results" style="display:none; margin-top:8px;"></div>
+				</div>
+
 				<div class="notice notice-warning inline">
 					<p>
 						<strong><?php esc_html_e( 'Warning:', 'dtg-converter' ); ?></strong>

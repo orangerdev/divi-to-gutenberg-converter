@@ -76,6 +76,10 @@ if ( ! class_exists( 'DTG_Converter' ) ) {
 			add_action( 'wp_ajax_dtg_scan_posts', [ $this, 'ajax_scan_posts' ] );
 			add_action( 'wp_ajax_dtg_preview_conversion', [ $this, 'ajax_preview_conversion' ] );
 			add_action( 'wp_ajax_dtg_run_batch', [ $this, 'ajax_run_batch' ] );
+			add_action( 'wp_ajax_dtg_run_hybrid_batch', [ $this, 'ajax_run_hybrid_batch' ] );
+			add_action( 'wp_ajax_dtg_check_hybrid_requirements', [ $this, 'ajax_check_hybrid_requirements' ] );
+			add_action( 'wp_ajax_dtg_convert_single', [ $this, 'ajax_convert_single' ] );
+			add_action( 'wp_ajax_dtg_convert_selected_batch', [ $this, 'ajax_convert_selected_batch' ] );
 			add_action( 'wp_ajax_dtg_rollback_post', [ $this, 'ajax_rollback_post' ] );
 			add_action( 'wp_ajax_dtg_rollback_all', [ $this, 'ajax_rollback_all' ] );
 			add_action( 'wp_ajax_dtg_regenerate_css', [ $this, 'ajax_regenerate_css' ] );
@@ -97,6 +101,11 @@ if ( ! class_exists( 'DTG_Converter' ) ) {
 			require_once $includes . 'class-gutenberg-builder.php';
 			require_once $includes . 'class-batch-processor.php';
 			require_once $includes . 'class-converter-admin.php';
+
+			// Hybrid mode components.
+			require_once $includes . 'class-shortcode-classifier.php';
+			require_once $includes . 'class-render-capture.php';
+			require_once $includes . 'class-css-extractor.php';
 
 			// Converters.
 			require_once $includes . 'converters/class-converter-base.php';
@@ -185,6 +194,158 @@ if ( ! class_exists( 'DTG_Converter' ) ) {
 		}
 
 		/**
+		 * AJAX: Run hybrid batch conversion (render capture for complex elements).
+		 */
+		public function ajax_run_hybrid_batch() {
+			check_ajax_referer( 'dtg_converter_nonce', 'nonce' );
+
+			if ( ! current_user_can( 'manage_options' ) ) {
+				wp_send_json_error( 'Unauthorized' );
+			}
+
+			$offset = isset( $_POST['offset'] ) ? absint( $_POST['offset'] ) : 0;
+			$limit  = isset( $_POST['limit'] ) ? absint( $_POST['limit'] ) : 10;
+
+			$processor           = new DTG_Batch_Processor();
+			$failed_requirements = null;
+
+			// Enable hybrid mode (validates requirements internally).
+			if ( ! $processor->enable_hybrid_mode( $failed_requirements ) ) {
+				wp_send_json_error( [
+					'message'      => 'Hybrid mode requirements not met.',
+					'requirements' => $failed_requirements,
+				] );
+			}
+
+			$result = $processor->process_batch( $offset, $limit );
+
+			// When all batches are done, finalize CSS extraction.
+			if ( ! $result['has_more'] ) {
+				$css_result             = $processor->regenerate_css_file();
+				$result['css_file']     = $css_result;
+				$result['captured_css'] = $processor->finalize_hybrid_css();
+			}
+
+			wp_send_json_success( $result );
+		}
+
+		/**
+		 * AJAX: Check hybrid mode requirements without running conversion.
+		 */
+		public function ajax_check_hybrid_requirements() {
+			check_ajax_referer( 'dtg_converter_nonce', 'nonce' );
+
+			if ( ! current_user_can( 'manage_options' ) ) {
+				wp_send_json_error( 'Unauthorized' );
+			}
+
+			$processor    = new DTG_Batch_Processor();
+			$requirements = $processor->check_hybrid_requirements();
+
+			$ready = true;
+			foreach ( $requirements as $req ) {
+				if ( 'missing' === $req['status'] ) {
+					$ready = false;
+					break;
+				}
+			}
+
+			wp_send_json_success( [
+				'ready'        => $ready,
+				'requirements' => $requirements,
+			] );
+		}
+
+		/**
+		 * AJAX: Convert a single post (hybrid mode).
+		 */
+		public function ajax_convert_single() {
+			check_ajax_referer( 'dtg_converter_nonce', 'nonce' );
+
+			if ( ! current_user_can( 'manage_options' ) ) {
+				wp_send_json_error( 'Unauthorized' );
+			}
+
+			$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+			$mode    = isset( $_POST['mode'] ) ? sanitize_text_field( $_POST['mode'] ) : 'hybrid';
+
+			if ( ! $post_id ) {
+				wp_send_json_error( 'Invalid post ID' );
+			}
+
+			$processor = new DTG_Batch_Processor();
+
+			if ( 'hybrid' === $mode ) {
+				$failed_requirements = null;
+				if ( ! $processor->enable_hybrid_mode( $failed_requirements ) ) {
+					wp_send_json_error( [
+						'message'      => 'Hybrid mode requirements not met.',
+						'requirements' => $failed_requirements,
+					] );
+				}
+			}
+
+			$result = $processor->convert_single_post( $post_id );
+
+			// Regenerate CSS after conversion.
+			if ( 'success' === $result['status'] ) {
+				$processor->regenerate_css_file();
+
+				if ( 'hybrid' === $mode ) {
+					$result['captured_css'] = $processor->finalize_hybrid_css();
+				}
+			}
+
+			if ( 'failed' === $result['status'] ) {
+				wp_send_json_error( $result['message'] );
+			}
+
+			wp_send_json_success( $result );
+		}
+
+		/**
+		 * AJAX: Convert a batch of selected posts with a specific mode.
+		 */
+		public function ajax_convert_selected_batch() {
+			check_ajax_referer( 'dtg_converter_nonce', 'nonce' );
+
+			if ( ! current_user_can( 'manage_options' ) ) {
+				wp_send_json_error( 'Unauthorized' );
+			}
+
+			$post_ids = isset( $_POST['post_ids'] ) ? array_map( 'absint', (array) $_POST['post_ids'] ) : [];
+			$mode     = isset( $_POST['mode'] ) ? sanitize_text_field( $_POST['mode'] ) : 'hybrid';
+
+			if ( empty( $post_ids ) ) {
+				wp_send_json_error( 'No posts selected' );
+			}
+
+			$processor = new DTG_Batch_Processor();
+
+			if ( 'hybrid' === $mode ) {
+				$failed_requirements = null;
+				if ( ! $processor->enable_hybrid_mode( $failed_requirements ) ) {
+					wp_send_json_error( [
+						'message'      => 'Hybrid mode requirements not met.',
+						'requirements' => $failed_requirements,
+					] );
+				}
+			}
+
+			$result = $processor->convert_selected_posts( $post_ids );
+
+			// Regenerate CSS.
+			$css_result         = $processor->regenerate_css_file();
+			$result['css_file'] = $css_result;
+
+			if ( 'hybrid' === $mode ) {
+				$result['captured_css'] = $processor->finalize_hybrid_css();
+			}
+
+			wp_send_json_success( $result );
+		}
+
+		/**
 		 * AJAX: Rollback a single post.
 		 */
 		public function ajax_rollback_post() {
@@ -250,14 +411,21 @@ if ( ! class_exists( 'DTG_Converter' ) ) {
 		}
 
 		/**
-		 * Enqueue the generated CSS file on the frontend.
+		 * Enqueue the generated CSS files on the frontend.
 		 */
 		public function enqueue_frontend_css() {
+			// 1. Per-post converter CSS (native Gutenberg blocks).
 			$css_url = DTG_Batch_Processor::get_css_file_url();
-
 			if ( $css_url ) {
 				$version = get_option( 'dtg_css_version', self::VERSION );
 				wp_enqueue_style( 'dtg-converter-custom', $css_url, [], $version );
+			}
+
+			// 2. Captured plugin/theme CSS (hybrid render capture).
+			$captured_url = DTG_CSS_Extractor::get_captured_css_url();
+			if ( $captured_url ) {
+				$captured_version = get_option( 'dtg_captured_css_version', self::VERSION );
+				wp_enqueue_style( 'dtg-captured-plugin-styles', $captured_url, [], $captured_version );
 			}
 		}
 
@@ -271,6 +439,13 @@ if ( ! class_exists( 'DTG_Converter' ) ) {
 			if ( $css_url ) {
 				$version = get_option( 'dtg_css_version', self::VERSION );
 				wp_enqueue_style( 'dtg-converter-custom', $css_url, [], $version );
+			}
+
+			// 1b. Enqueue captured plugin/theme CSS.
+			$captured_url = DTG_CSS_Extractor::get_captured_css_url();
+			if ( $captured_url ) {
+				$captured_version = get_option( 'dtg_captured_css_version', self::VERSION );
+				wp_enqueue_style( 'dtg-captured-plugin-styles', $captured_url, [], $captured_version );
 			}
 
 			// 2. Add per-post inline CSS (covers posts not yet aggregated).

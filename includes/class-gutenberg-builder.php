@@ -27,6 +27,15 @@ class DTG_Gutenberg_Builder {
 	/** @var int Current post ID. */
 	private $post_id = 0;
 
+	/** @var bool Whether hybrid mode is enabled. */
+	private $hybrid_mode = false;
+
+	/** @var DTG_Shortcode_Classifier|null */
+	private $classifier;
+
+	/** @var DTG_Render_Capture|null */
+	private $render_capture;
+
 	public function __construct() {
 		$this->parser = new DTG_Shortcode_Parser();
 
@@ -36,6 +45,27 @@ class DTG_Gutenberg_Builder {
 		$this->register_converter( new DTG_Converter_Button() );
 		$this->register_converter( new DTG_Converter_Separator() );
 		$this->register_converter( new DTG_Converter_Misc() );
+	}
+
+	/**
+	 * Enable hybrid mode with render capture for complex elements.
+	 *
+	 * @param DTG_Shortcode_Classifier $classifier    Shortcode classifier.
+	 * @param DTG_Render_Capture       $render_capture Render capture engine.
+	 */
+	public function enable_hybrid_mode( $classifier, $render_capture ) {
+		$this->hybrid_mode   = true;
+		$this->classifier    = $classifier;
+		$this->render_capture = $render_capture;
+	}
+
+	/**
+	 * Check if hybrid mode is enabled.
+	 *
+	 * @return bool
+	 */
+	public function is_hybrid_mode() {
+		return $this->hybrid_mode;
 	}
 
 	private function register_converter( DTG_Converter_Base $converter ) {
@@ -185,10 +215,25 @@ class DTG_Gutenberg_Builder {
 
 		$tag = $node['tag'];
 
+		// Hybrid mode: classify and route to render capture if needed.
+		if ( $this->hybrid_mode && $this->classifier && $this->render_capture ) {
+			$classification = $this->classifier->classify( $node );
+
+			if ( 'capture' === $classification || 'dynamic' === $classification ) {
+				return $this->render_capture->capture_node( $node, $classification );
+			}
+		}
+
+		// Native conversion path (existing converters).
 		foreach ( $this->converters as $converter ) {
 			if ( $converter->can_convert( $tag ) ) {
 				return $converter->convert( $node );
 			}
+		}
+
+		// Fallback: in hybrid mode, try render capture for unknown tags.
+		if ( $this->hybrid_mode && $this->render_capture ) {
+			return $this->render_capture->capture_node( $node, 'capture' );
 		}
 
 		return $this->wrap_as_shortcode_block( $node );

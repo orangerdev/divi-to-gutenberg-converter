@@ -78,32 +78,136 @@
 	}
 
 	/**
-	 * Render post list table.
+	 * Render post list table with checkboxes and per-post mode selection.
 	 */
 	function renderPostList(posts) {
-		var html = '<table>';
-		html += '<tr><th>ID</th><th>Title</th><th>Type</th><th>Status</th><th>Shortcodes</th><th>Converted</th><th>Action</th></tr>';
+		// Bulk controls toolbar.
+		var html = '<div class="dtg-bulk-controls">';
+		html += '<button type="button" class="button button-small" id="dtg-select-all-btn">Select All</button> ';
+		html += '<button type="button" class="button button-small" id="dtg-deselect-all-btn">Deselect All</button>';
+		html += '<span class="dtg-bulk-separator">|</span>';
+		html += '<label for="dtg-bulk-mode">Set mode for selected: </label>';
+		html += '<select id="dtg-bulk-mode" class="dtg-mode-select">';
+		html += '<option value="hybrid">Hybrid</option>';
+		html += '<option value="native">Native</option>';
+		html += '</select> ';
+		html += '<button type="button" class="button button-small" id="dtg-apply-bulk-mode">Apply</button>';
+		html += '<span class="dtg-bulk-separator">|</span>';
+		html += '<span id="dtg-selected-count" class="dtg-selected-count">0 selected</span>';
+		html += '</div>';
+
+		// Post table.
+		html += '<table class="widefat dtg-post-table">';
+		html += '<thead><tr>';
+		html += '<th class="dtg-col-check"><input type="checkbox" id="dtg-select-all-check" /></th>';
+		html += '<th class="dtg-col-id">ID</th>';
+		html += '<th>Title</th>';
+		html += '<th class="dtg-col-type">Type</th>';
+		html += '<th>Shortcodes</th>';
+		html += '<th class="dtg-col-status">Converted</th>';
+		html += '<th class="dtg-col-mode">Mode</th>';
+		html += '<th class="dtg-col-action">Action</th>';
+		html += '</tr></thead><tbody>';
 
 		$.each(posts, function(i, post) {
 			var tags = Object.keys(post.shortcodes).join(', ');
-			var convertedBadge = post.converted
+			var isConverted = post.converted;
+			var convertedBadge = isConverted
 				? '<span class="dtg-converted-badge">Yes</span>'
 				: 'No';
 
-			html += '<tr>';
-			html += '<td>' + post.ID + '</td>';
+			var checkboxHtml = '<input type="checkbox" class="dtg-post-check" value="' + post.ID + '"';
+			if (!isConverted) {
+				checkboxHtml += ' checked="checked"';
+			}
+			checkboxHtml += ' />';
+
+			var modeHtml;
+			if (isConverted) {
+				modeHtml = '<span class="dtg-mode-na">&mdash;</span>';
+			} else {
+				modeHtml = '<select class="dtg-post-mode dtg-mode-select" data-post-id="' + post.ID + '">';
+				modeHtml += '<option value="hybrid" selected>Hybrid</option>';
+				modeHtml += '<option value="native">Native</option>';
+				modeHtml += '</select>';
+			}
+
+			var rowClass = isConverted ? 'dtg-row-converted' : '';
+
+			html += '<tr class="' + rowClass + '" data-post-id="' + post.ID + '">';
+			html += '<td class="dtg-col-check">' + checkboxHtml + '</td>';
+			html += '<td class="dtg-col-id">' + post.ID + '</td>';
 			html += '<td>' + escHtml(post.post_title || '(no title)') + '</td>';
-			html += '<td>' + escHtml(post.post_type) + '</td>';
-			html += '<td>' + escHtml(post.post_status) + '</td>';
+			html += '<td class="dtg-col-type">' + escHtml(post.post_type) + '</td>';
 			html += '<td><small>' + escHtml(tags) + '</small></td>';
-			html += '<td>' + convertedBadge + '</td>';
-			html += '<td><button class="button button-small dtg-preview-post" data-id="' + post.ID + '">Preview</button></td>';
+			html += '<td class="dtg-col-status">' + convertedBadge + '</td>';
+			html += '<td class="dtg-col-mode">' + modeHtml + '</td>';
+			html += '<td class="dtg-col-action"><button class="button button-small dtg-preview-post" data-id="' + post.ID + '">Preview</button></td>';
 			html += '</tr>';
 		});
 
-		html += '</table>';
+		html += '</tbody></table>';
 		$('#dtg-post-list').html(html);
+
+		// Initial count update.
+		updateSelectedCount();
 	}
+
+	/**
+	 * Update the selected post count display.
+	 */
+	function updateSelectedCount() {
+		var count = $('.dtg-post-check:checked').length;
+		$('#dtg-selected-count').text(count + ' selected');
+	}
+
+	/**
+	 * Select All button.
+	 */
+	$(document).on('click', '#dtg-select-all-btn', function() {
+		$('.dtg-post-check').prop('checked', true);
+		$('#dtg-select-all-check').prop('checked', true);
+		updateSelectedCount();
+	});
+
+	/**
+	 * Deselect All button.
+	 */
+	$(document).on('click', '#dtg-deselect-all-btn', function() {
+		$('.dtg-post-check').prop('checked', false);
+		$('#dtg-select-all-check').prop('checked', false);
+		updateSelectedCount();
+	});
+
+	/**
+	 * Header checkbox — toggle all.
+	 */
+	$(document).on('change', '#dtg-select-all-check', function() {
+		var isChecked = $(this).prop('checked');
+		$('.dtg-post-check').prop('checked', isChecked);
+		updateSelectedCount();
+	});
+
+	/**
+	 * Individual checkbox change — update count and header checkbox.
+	 */
+	$(document).on('change', '.dtg-post-check', function() {
+		updateSelectedCount();
+		var totalChecks = $('.dtg-post-check').length;
+		var checkedCount = $('.dtg-post-check:checked').length;
+		$('#dtg-select-all-check').prop('checked', checkedCount === totalChecks);
+	});
+
+	/**
+	 * Apply bulk mode to all checked posts.
+	 */
+	$(document).on('click', '#dtg-apply-bulk-mode', function() {
+		var mode = $('#dtg-bulk-mode').val();
+		$('.dtg-post-check:checked').each(function() {
+			var postId = $(this).val();
+			$('select.dtg-post-mode[data-post-id="' + postId + '"]').val(mode);
+		});
+	});
 
 	/**
 	 * Preview from post list button.
@@ -165,10 +269,40 @@
 	});
 
 	/**
-	 * Run batch conversion.
+	 * Run batch conversion — processes selected posts with per-post modes.
 	 */
 	$('#dtg-convert-btn').on('click', function() {
-		if (!confirm(DTG.i18n.confirm_convert)) {
+		// 1. Collect selected posts with their modes.
+		var hybridIds = [];
+		var nativeIds = [];
+
+		$('.dtg-post-check:checked').each(function() {
+			var postId = parseInt($(this).val());
+			var mode = $('select.dtg-post-mode[data-post-id="' + postId + '"]').val() || 'hybrid';
+			if (mode === 'hybrid') {
+				hybridIds.push(postId);
+			} else {
+				nativeIds.push(postId);
+			}
+		});
+
+		var totalSelected = hybridIds.length + nativeIds.length;
+
+		if (totalSelected === 0) {
+			alert('Please select at least one post to convert.');
+			return;
+		}
+
+		var summary = 'Convert ' + totalSelected + ' post(s)?';
+		if (hybridIds.length > 0) {
+			summary += '\n- ' + hybridIds.length + ' in Hybrid mode';
+		}
+		if (nativeIds.length > 0) {
+			summary += '\n- ' + nativeIds.length + ' in Native mode';
+		}
+		summary += '\n\nMake sure you have a database backup.';
+
+		if (!confirm(summary)) {
 			return;
 		}
 
@@ -182,17 +316,44 @@
 		$('#dtg-log-entries').html('');
 
 		var totalProcessed = 0;
-		var totalCount = parseInt($('#dtg-total-posts').text()) || 0;
 
-		function processBatch(offset) {
+		// Update progress bar.
+		function updateProgress() {
+			var percent = totalSelected > 0 ? Math.min(100, Math.round((totalProcessed / totalSelected) * 100)) : 100;
+			$('#dtg-progress-fill').css('width', percent + '%');
+			$('#dtg-progress-text').text(totalProcessed + ' / ' + totalSelected + ' posts processed (' + percent + '%)');
+		}
+
+		// Process a batch of post IDs with a specific mode.
+		function processSelectedBatch(postIds, mode, offset, onComplete) {
+			if (offset >= postIds.length) {
+				onComplete();
+				return;
+			}
+
+			var batch = postIds.slice(offset, offset + 10);
+
 			$.post(DTG.ajaxUrl, {
-				action: 'dtg_run_batch',
+				action: 'dtg_convert_selected_batch',
 				nonce: DTG.nonce,
-				offset: offset,
-				limit: 10
+				post_ids: batch,
+				mode: mode
 			}, function(response) {
 				if (!response.success) {
-					addLog('Batch failed: ' + (response.data || 'Unknown error'), 'failed');
+					var errData = response.data;
+					if (errData && errData.requirements) {
+						addLog('Hybrid mode requirements not met:', 'failed');
+						$.each(errData.requirements, function(i, req) {
+							var icon = req.status === 'ok' ? 'OK' : 'MISSING';
+							var line = '[' + icon + '] ' + escHtml(req.name);
+							if (req.hint) {
+								line += ' — ' + escHtml(req.hint);
+							}
+							addLog(line, req.status === 'ok' ? 'success' : 'failed');
+						});
+					} else {
+						addLog('Batch failed: ' + (errData && errData.message ? errData.message : errData || 'Unknown error'), 'failed');
+					}
 					$btn.prop('disabled', false);
 					$spinner.removeClass('is-active');
 					return;
@@ -200,11 +361,7 @@
 
 				var data = response.data;
 				totalProcessed += data.processed + data.skipped;
-
-				// Update progress.
-				var percent = totalCount > 0 ? Math.min(100, Math.round((totalProcessed / totalCount) * 100)) : 100;
-				$('#dtg-progress-fill').css('width', percent + '%');
-				$('#dtg-progress-text').text(totalProcessed + ' / ' + totalCount + ' posts processed (' + percent + '%)');
+				updateProgress();
 
 				// Log details.
 				$.each(data.details, function(i, detail) {
@@ -214,23 +371,44 @@
 					);
 				});
 
-				// Continue if more.
-				if (data.has_more) {
-					processBatch(offset + 10);
-				} else {
-					addLog('--- Conversion complete! ---', 'success');
-					$btn.prop('disabled', false);
-					$spinner.removeClass('is-active');
-					$('#dtg-progress-fill').css('width', '100%');
-				}
+				// Mark converted posts in the table.
+				$.each(data.details, function(i, detail) {
+					if (detail.status === 'success') {
+						var $row = $('tr[data-post-id="' + detail.ID + '"]');
+						$row.addClass('dtg-row-converted');
+						$row.find('.dtg-post-check').prop('checked', false);
+						$row.find('.dtg-col-status').html('<span class="dtg-converted-badge">Yes</span>');
+						$row.find('.dtg-col-mode').html('<span class="dtg-mode-na">&mdash;</span>');
+					}
+				});
+				updateSelectedCount();
+
+				// Continue with next batch.
+				processSelectedBatch(postIds, mode, offset + 10, onComplete);
 			}).fail(function() {
-				addLog('AJAX request failed at offset ' + offset, 'failed');
+				addLog('AJAX request failed for ' + mode + ' batch at offset ' + offset, 'failed');
 				$btn.prop('disabled', false);
 				$spinner.removeClass('is-active');
 			});
 		}
 
-		processBatch(0);
+		// 2. Process hybrid posts first, then native.
+		if (hybridIds.length > 0) {
+			addLog('--- Processing ' + hybridIds.length + ' post(s) in Hybrid mode ---', 'success');
+		}
+
+		processSelectedBatch(hybridIds, 'hybrid', 0, function() {
+			if (nativeIds.length > 0) {
+				addLog('--- Processing ' + nativeIds.length + ' post(s) in Native mode ---', 'success');
+			}
+
+			processSelectedBatch(nativeIds, 'native', 0, function() {
+				addLog('--- Conversion complete! ---', 'success');
+				$btn.prop('disabled', false);
+				$spinner.removeClass('is-active');
+				$('#dtg-progress-fill').css('width', '100%');
+			});
+		});
 	});
 
 	/**
@@ -353,6 +531,120 @@
 			$btn.prop('disabled', false);
 			$spinner.removeClass('is-active');
 			alert('AJAX request failed');
+		});
+	});
+
+	/**
+	 * Convert a single post.
+	 */
+	$('#dtg-convert-single-btn').on('click', function() {
+		var postId = $('#dtg-convert-single-post-id').val();
+		var $btn = $(this);
+		var $spinner = $('#dtg-convert-single-spinner');
+		var $results = $('#dtg-convert-single-results');
+		var conversionMode = $('#dtg-convert-single-mode').val() || 'hybrid';
+
+		if (!postId) {
+			alert('Please enter a Post ID');
+			return;
+		}
+
+		if (!confirm('Convert post ID ' + postId + ' using ' + conversionMode + ' mode?')) {
+			return;
+		}
+
+		$btn.prop('disabled', true);
+		$spinner.addClass('is-active');
+		$results.html('<em>Converting...</em>').show();
+
+		$.post(DTG.ajaxUrl, {
+			action: 'dtg_convert_single',
+			nonce: DTG.nonce,
+			post_id: postId,
+			mode: conversionMode
+		}, function(response) {
+			$btn.prop('disabled', false);
+			$spinner.removeClass('is-active');
+
+			if (!response.success) {
+				var errMsg = response.data;
+				if (errMsg && errMsg.requirements) {
+					var html = '<div class="notice notice-error inline"><p><strong>Requirements not met:</strong></p><ul>';
+					$.each(errMsg.requirements, function(i, req) {
+						if (req.status === 'missing') {
+							html += '<li>' + escHtml(req.name) + ' — ' + escHtml(req.hint) + '</li>';
+						}
+					});
+					html += '</ul></div>';
+					$results.html(html);
+				} else {
+					$results.html('<div class="notice notice-error inline"><p>Failed: ' + escHtml(errMsg) + '</p></div>');
+				}
+				return;
+			}
+
+			var data = response.data;
+			var cssInfo = data.css ? ' CSS generated: ' + data.css.length + ' chars.' : '';
+			$results.html(
+				'<div class="notice notice-success inline"><p>' +
+				escHtml(data.message) + cssInfo +
+				' <a href="' + escHtml(DTG.siteUrl || '') + '/?p=' + postId + '" target="_blank">View post</a>' +
+				'</p></div>'
+			);
+		}).fail(function() {
+			$btn.prop('disabled', false);
+			$spinner.removeClass('is-active');
+			$results.html('<div class="notice notice-error inline"><p>AJAX request failed.</p></div>');
+		});
+	});
+
+	/**
+	 * Check hybrid requirements (preflight).
+	 */
+	$('#dtg-check-requirements-btn').on('click', function() {
+		var $btn = $(this);
+		var $results = $('#dtg-requirements-results');
+
+		$btn.prop('disabled', true);
+		$results.html('<em>Checking...</em>').show();
+
+		$.post(DTG.ajaxUrl, {
+			action: 'dtg_check_hybrid_requirements',
+			nonce: DTG.nonce
+		}, function(response) {
+			$btn.prop('disabled', false);
+
+			if (!response.success) {
+				$results.html('<span style="color:#d63638;">Check failed.</span>');
+				return;
+			}
+
+			var data = response.data;
+			var html = '<table style="width:100%; border-collapse:collapse; margin-top:8px;">';
+
+			$.each(data.requirements, function(i, req) {
+				var isOk = req.status === 'ok';
+				var icon = isOk ? '<span style="color:#00a32a;">&#10004;</span>' : '<span style="color:#d63638;">&#10008;</span>';
+				var hint = (!isOk && req.hint) ? ' <small style="color:#666;">— ' + escHtml(req.hint) + '</small>' : '';
+
+				html += '<tr>';
+				html += '<td style="padding:3px 8px 3px 0; white-space:nowrap;">' + icon + '</td>';
+				html += '<td style="padding:3px 0;">' + escHtml(req.name) + hint + '</td>';
+				html += '</tr>';
+			});
+
+			html += '</table>';
+
+			if (data.ready) {
+				html += '<p style="color:#00a32a; margin:8px 0 0;"><strong>All requirements met. Ready for hybrid conversion.</strong></p>';
+			} else {
+				html += '<p style="color:#d63638; margin:8px 0 0;"><strong>Some requirements are missing. Please install the missing plugins first.</strong></p>';
+			}
+
+			$results.html(html);
+		}).fail(function() {
+			$btn.prop('disabled', false);
+			$results.html('<span style="color:#d63638;">AJAX request failed.</span>');
 		});
 	});
 

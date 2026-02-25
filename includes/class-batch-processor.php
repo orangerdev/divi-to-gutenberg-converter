@@ -52,6 +52,13 @@ class DTG_Batch_Processor {
 	const UPLOAD_DIR = 'dtg-converter';
 
 	/**
+	 * Meta key for captured plugin CSS flag.
+	 *
+	 * @var string
+	 */
+	const CAPTURED_CSS_META_KEY = '_dtg_captured_plugin_css';
+
+	/**
 	 * Gutenberg builder instance.
 	 *
 	 * @var DTG_Gutenberg_Builder
@@ -59,10 +66,174 @@ class DTG_Batch_Processor {
 	private $builder;
 
 	/**
+	 * Shortcode classifier (hybrid mode).
+	 *
+	 * @var DTG_Shortcode_Classifier|null
+	 */
+	private $classifier;
+
+	/**
+	 * Render capture engine (hybrid mode).
+	 *
+	 * @var DTG_Render_Capture|null
+	 */
+	private $render_capture;
+
+	/**
+	 * CSS extractor (hybrid mode).
+	 *
+	 * @var DTG_CSS_Extractor|null
+	 */
+	private $css_extractor;
+
+	/**
+	 * Whether hybrid mode is enabled.
+	 *
+	 * @var bool
+	 */
+	private $hybrid_mode = false;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		$this->builder = new DTG_Gutenberg_Builder();
+	}
+
+	/**
+	 * Enable hybrid conversion mode.
+	 *
+	 * Sets up the classifier, render capture, and CSS extractor.
+	 * Must be called while WPBakery/JupiterDonut are active.
+	 *
+	 * @param array|null &$failed_requirements Optional. If provided, populated with failed requirement details on failure.
+	 * @return bool True if hybrid mode was enabled, false if requirements not met.
+	 */
+	public function enable_hybrid_mode( &$failed_requirements = null ) {
+		$requirements = $this->check_hybrid_requirements();
+		$all_ok       = true;
+
+		foreach ( $requirements as $req ) {
+			if ( 'missing' === $req['status'] ) {
+				$all_ok = false;
+				break;
+			}
+		}
+
+		if ( ! $all_ok ) {
+			$failed_requirements = $requirements;
+			$missing = [];
+			foreach ( $requirements as $req ) {
+				if ( 'missing' === $req['status'] ) {
+					$missing[] = $req['name'] . ': ' . $req['hint'];
+				}
+			}
+			error_log( 'DTG Hybrid Mode: ' . implode( '; ', $missing ) );
+			return false;
+		}
+
+		$this->classifier    = new DTG_Shortcode_Classifier();
+		$this->render_capture = new DTG_Render_Capture();
+		$this->css_extractor  = new DTG_CSS_Extractor();
+
+		// Wire CSS extractor to render capture.
+		$this->render_capture->set_css_extractor( $this->css_extractor );
+
+		// Enable hybrid mode on the builder.
+		$this->builder->enable_hybrid_mode( $this->classifier, $this->render_capture );
+
+		// Discover available CSS source files.
+		$this->css_extractor->discover_stylesheets();
+
+		$this->hybrid_mode = true;
+		return true;
+	}
+
+	/**
+	 * Check hybrid mode requirements and return detailed status for each.
+	 *
+	 * @return array[] Array of requirement arrays with keys: name, status ('ok'|'missing'), hint.
+	 */
+	public function check_hybrid_requirements() {
+		$requirements = [];
+
+		// 1. Jupiter theme.
+		$theme       = wp_get_theme();
+		$has_jupiter = ( 'jupiter' === strtolower( $theme->get_template() ) );
+		$requirements[] = [
+			'name'   => 'Jupiter Theme',
+			'status' => $has_jupiter ? 'ok' : 'missing',
+			'hint'   => $has_jupiter ? '' : 'Activate the Jupiter theme',
+		];
+
+		// 2. Jupiter Core plugin.
+		$has_core = class_exists( 'Jupiter_Core' );
+		$requirements[] = [
+			'name'   => 'Jupiter Core',
+			'status' => $has_core ? 'ok' : 'missing',
+			'hint'   => $has_core ? '' : 'Activate Jupiter Core plugin via Appearance > Install Plugins',
+		];
+
+		// 3. WPBakery Page Builder (Modified Version) — provides Vc_Manager.
+		$has_wpb = class_exists( 'Vc_Manager' );
+		$requirements[] = [
+			'name'   => 'WPBakery Page Builder (Modified Version)',
+			'status' => $has_wpb ? 'ok' : 'missing',
+			'hint'   => $has_wpb ? '' : 'Install & activate via Appearance > Install Plugins (TGMPA)',
+		];
+
+		// 4. Jupiter Donut plugin (depends on WPBakery for initialization).
+		$has_jd = class_exists( 'Jupiter_Donut' );
+		$jd_hint = '';
+		if ( ! $has_jd ) {
+			if ( is_dir( WP_PLUGIN_DIR . '/jupiter-donut' ) ) {
+				$jd_hint = $has_wpb
+					? 'Plugin directory exists but class not loaded — try activating it'
+					: 'Installed but cannot initialize without WPBakery — install WPBakery first';
+			} else {
+				$jd_hint = 'Install & activate via Appearance > Install Plugins';
+			}
+		}
+		$requirements[] = [
+			'name'   => 'Jupiter Donut',
+			'status' => $has_jd ? 'ok' : 'missing',
+			'hint'   => $jd_hint,
+		];
+
+		// 5. Shortcodes registered (ultimate proof everything is wired up).
+		//    During AJAX, WPBakery skips shortcode registration because is_admin()
+		//    returns true and template_redirect never fires. Force it manually.
+		if ( $has_wpb && $has_jd && class_exists( 'WPBMap' ) ) {
+			WPBMap::addAllMappedShortcodes();
+		}
+
+		$has_shortcodes = shortcode_exists( 'vc_row' ) || shortcode_exists( 'mk_page_section' );
+		$sc_hint = '';
+		if ( ! $has_shortcodes ) {
+			if ( ! $has_wpb ) {
+				$sc_hint = 'Requires WPBakery to be active first';
+			} elseif ( ! $has_jd ) {
+				$sc_hint = 'Requires Jupiter Donut to be active';
+			} else {
+				$sc_hint = 'Plugins are active but shortcodes not registered — check for plugin errors';
+			}
+		}
+		$requirements[] = [
+			'name'   => 'Shortcodes Registered',
+			'status' => $has_shortcodes ? 'ok' : 'missing',
+			'hint'   => $sc_hint,
+		];
+
+		return $requirements;
+	}
+
+	/**
+	 * Check if hybrid mode is enabled.
+	 *
+	 * @return bool
+	 */
+	public function is_hybrid_mode() {
+		return $this->hybrid_mode;
 	}
 
 	/**
@@ -126,9 +297,16 @@ class DTG_Batch_Processor {
 				$all_shortcodes[ $tag ] += $count;
 			}
 
+			$post_link = get_permalink( $post->ID );
+			if ( ! $post_link ) {
+				$post_link = get_edit_post_link( $post->ID );
+			}
+
+			$post_title = "<a href='{$post_link}' target='_blank'>{$post->post_title}</a>";
+
 			$results['posts'][] = [
 				'ID'          => $post->ID,
-				'post_title'  => $post->post_title,
+				'post_title'  => $post_title,
 				'post_type'   => $post->post_type,
 				'post_status' => $post->post_status,
 				'has_vc'      => $has_vc,
@@ -252,6 +430,98 @@ class DTG_Batch_Processor {
 	}
 
 	/**
+	 * Convert a single post by ID (public entry point).
+	 *
+	 * @param int $post_id Post ID.
+	 * @return array Result with status and message.
+	 */
+	public function convert_single_post( $post_id ) {
+		$post = get_post( $post_id );
+
+		if ( ! $post ) {
+			return [ 'status' => 'failed', 'message' => 'Post not found' ];
+		}
+
+		// Skip already converted.
+		$is_converted = get_post_meta( $post_id, self::CONVERTED_META_KEY, true );
+		if ( $is_converted ) {
+			return [ 'status' => 'skipped', 'message' => 'Already converted on ' . $is_converted ];
+		}
+
+		try {
+			$this->convert_post( $post );
+			return [
+				'status'  => 'success',
+				'message' => 'Converted successfully',
+				'css'     => $this->builder->get_collected_css(),
+			];
+		} catch ( Exception $e ) {
+			return [ 'status' => 'failed', 'message' => $e->getMessage() ];
+		}
+	}
+
+	/**
+	 * Convert a list of selected posts by their IDs.
+	 *
+	 * @param int[] $post_ids Array of post IDs.
+	 * @return array Results with processed/skipped/failed counts and details.
+	 */
+	public function convert_selected_posts( $post_ids ) {
+		$results = [
+			'processed' => 0,
+			'skipped'   => 0,
+			'failed'    => 0,
+			'details'   => [],
+		];
+
+		foreach ( $post_ids as $post_id ) {
+			$post = get_post( $post_id );
+
+			if ( ! $post ) {
+				$results['details'][] = [
+					'ID'         => $post_id,
+					'post_title' => '(not found)',
+					'status'     => 'failed',
+					'message'    => 'Post not found',
+				];
+				$results['failed']++;
+				continue;
+			}
+
+			$detail = [
+				'ID'         => $post->ID,
+				'post_title' => $post->post_title,
+				'status'     => 'success',
+				'message'    => '',
+			];
+
+			// Skip already converted.
+			$is_converted = get_post_meta( $post->ID, self::CONVERTED_META_KEY, true );
+			if ( $is_converted ) {
+				$detail['status']  = 'skipped';
+				$detail['message'] = 'Already converted';
+				$results['skipped']++;
+				$results['details'][] = $detail;
+				continue;
+			}
+
+			try {
+				$this->convert_post( $post );
+				$results['processed']++;
+				$detail['message'] = 'Converted successfully';
+			} catch ( Exception $e ) {
+				$detail['status']  = 'failed';
+				$detail['message'] = $e->getMessage();
+				$results['failed']++;
+			}
+
+			$results['details'][] = $detail;
+		}
+
+		return $results;
+	}
+
+	/**
 	 * Convert a single post.
 	 *
 	 * @param WP_Post|object $post Post object.
@@ -275,11 +545,27 @@ class DTG_Batch_Processor {
 			update_post_meta( $post->ID, '_dtg_wpb_post_css_backup', $wpb_post_css );
 		}
 
-		// 3. Convert content with CSS collection.
+		// 3. Hybrid mode: setup frontend context for render capture.
+		if ( $this->hybrid_mode && $this->render_capture ) {
+			$this->render_capture->setup_frontend_context( $post->ID );
+			$this->render_capture->reset();
+		}
+
+		// 3b. Hybrid mode: capture dynamic CSS for this post.
+		if ( $this->hybrid_mode && $this->css_extractor ) {
+			$this->css_extractor->capture_post_dynamic_css( $post->ID );
+		}
+
+		// 4. Convert content with CSS collection.
 		$this->builder->set_post_id( $post->ID );
 		$converted = $this->builder->convert( $original );
 
-		// 4. Save collected CSS and Google Fonts to post meta.
+		// 5. Hybrid mode: teardown frontend context.
+		if ( $this->hybrid_mode && $this->render_capture ) {
+			$this->render_capture->teardown_frontend_context();
+		}
+
+		// 6. Save collected CSS and Google Fonts to post meta.
 		$post_css = $this->builder->get_collected_css();
 
 		// Append original WPBakery shortcode CSS (preserved vc_custom_* classes).
@@ -301,7 +587,7 @@ class DTG_Batch_Processor {
 			update_post_meta( $post->ID, self::FONTS_META_KEY, $google_fonts );
 		}
 
-		// 5. Update post content.
+		// 7. Update post content.
 		$result = wp_update_post(
 			[
 				'ID'           => $post->ID,
@@ -327,12 +613,12 @@ class DTG_Batch_Processor {
 			throw new Exception( 'Failed to update post: ' . $result->get_error_message() );
 		}
 
-		// 6. Clean up WPBakery meta.
+		// 8. Clean up WPBakery meta.
 		delete_post_meta( $post->ID, '_wpb_vc_js_status' );
 		delete_post_meta( $post->ID, '_wpb_shortcodes_custom_css' );
 		delete_post_meta( $post->ID, '_wpb_shortcodes_default_css' );
 
-		// 7. Mark as converted.
+		// 9. Mark as converted.
 		update_post_meta( $post->ID, self::CONVERTED_META_KEY, current_time( 'mysql' ) );
 	}
 
@@ -564,5 +850,40 @@ class DTG_Batch_Processor {
 		}
 
 		return $upload['baseurl'] . '/' . self::UPLOAD_DIR . '/custom-styles.css';
+	}
+
+	/**
+	 * Finalize CSS extraction for hybrid mode.
+	 *
+	 * Extracts matching CSS rules from plugin/theme stylesheets
+	 * and writes the captured-plugin-styles.css bundle.
+	 *
+	 * Should be called after all posts have been converted.
+	 *
+	 * @return array Result with file info.
+	 */
+	public function finalize_hybrid_css() {
+		if ( ! $this->hybrid_mode || ! $this->css_extractor ) {
+			return [
+				'success' => false,
+				'message' => 'Hybrid mode not enabled',
+			];
+		}
+
+		// Bundle full CSS from all source stylesheets (not selective extraction).
+		// This ensures no styles are lost when plugins/theme are deactivated.
+		$this->css_extractor->bundle_full_css();
+
+		// Write the bundle file.
+		return $this->css_extractor->write_bundle();
+	}
+
+	/**
+	 * Get the URL to the captured plugin styles CSS file.
+	 *
+	 * @return string|false
+	 */
+	public static function get_captured_css_url() {
+		return DTG_CSS_Extractor::get_captured_css_url();
 	}
 }

@@ -201,6 +201,95 @@
 	border-radius: 4px;
 }
 
+/* Bulk controls toolbar */
+.dtg-bulk-controls {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 12px;
+	background: #f0f0f1;
+	border: 1px solid #ddd;
+	border-bottom: none;
+	border-radius: 4px 4px 0 0;
+	flex-wrap: wrap;
+}
+
+.dtg-bulk-controls .button {
+	margin: 0;
+}
+
+.dtg-bulk-separator {
+	color: #ccc;
+	margin: 0 4px;
+	user-select: none;
+}
+
+.dtg-selected-count {
+	font-weight: 600;
+	color: #2271b1;
+	font-size: 13px;
+}
+
+/* Post table */
+.dtg-post-table {
+	border-top: none;
+	border-radius: 0 0 4px 4px;
+}
+
+.dtg-post-table th,
+.dtg-post-table td {
+	vertical-align: middle;
+}
+
+.dtg-col-check {
+	width: 30px;
+	text-align: center !important;
+}
+
+.dtg-col-id {
+	width: 60px;
+}
+
+.dtg-col-type {
+	width: 70px;
+}
+
+.dtg-col-status {
+	width: 90px;
+}
+
+.dtg-col-mode {
+	width: 100px;
+}
+
+.dtg-col-action {
+	width: 80px;
+}
+
+/* Mode dropdown */
+.dtg-mode-select {
+	min-width: 80px;
+	padding: 2px 4px;
+	font-size: 12px;
+	height: auto;
+	line-height: 1.4;
+}
+
+.dtg-mode-na {
+	color: #999;
+	font-style: italic;
+}
+
+/* Converted row */
+.dtg-row-converted {
+	background: #f9f9f9;
+	opacity: 0.7;
+}
+
+.dtg-row-converted:hover {
+	opacity: 1;
+}
+
 /* Spinner fix */
 .dtg-section .spinner {
 	float: none;

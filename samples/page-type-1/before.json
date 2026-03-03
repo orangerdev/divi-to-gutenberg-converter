@@ -1,0 +1,73 @@
+<!-- wp:freeform -->
+<p>
+<!-- /wp:freeform -->
+
+<!-- wp:group {"layout":{"type":"constrained"},"align":"full","className":"dtg-74115-1"} -->
+<div class="wp-block-group alignfull dtg-74115-1"><!-- wp:columns -->
+<div class="wp-block-columns"><!-- wp:column {"width":"25%"} -->
+<div class="wp-block-column" style="flex-basis:25%"><!-- wp:html -->
+[vc_wp_custommenu nav_menu="357"]
+<!-- /wp:html -->
+
+<!-- wp:image {"id":74672,"align":"center","className":"dtg-74115-2"} -->
+<figure class="wp-block-image size-full dtg-74115-2"><img src="https://solutionsforscreenprintersv1.kinsta.cloud/wp-content/uploads/2025/01/support_button_1.png" class="wp-image-74672"/></figure>
+<!-- /wp:image -->
+
+</div>
+<!-- /wp:column -->
+<!-- wp:column {"width":"75%"} -->
+<div class="wp-block-column" style="flex-basis:75%"><!-- wp:spacer {"height":"26px"} -->
+<div style="height:26px" aria-hidden="true" class="wp-block-spacer"></div>
+<!-- /wp:spacer -->
+
+<!-- wp:freeform -->
+<div class="dtg-74115-3 vc_custom_1734990679036 image-text-block">
+</p>
+<h1><span style="color: #ffffff;">Marquee Tool</span></h1>
+<p>
+</div>
+<!-- /wp:freeform -->
+
+<!-- wp:freeform -->
+<div class="dtg-74115-4 vc_custom_1734990694226">
+<span style="color: #ffffff;">Select Area, Saturation, and Eraser tools will affect the separation selected in the Active Separations window.</span></p>
+<p><span style="color: #ffffff;">Creates a rectangular selected area.</span>
+</div>
+<!-- /wp:freeform -->
+
+<!-- wp:image {"id":48829} -->
+<figure class="wp-block-image size-full"><img src="https://solutionsforscreenprintersv1.kinsta.cloud/wp-content/uploads/2021/11/select-tool.gif" class="wp-image-48829"/></figure>
+<!-- /wp:image -->
+
+<!-- wp:freeform -->
+<div class="dtg-74115-5 vc_custom_1734991127001 image-text-block">
+</p>
+<h2><span style="color: #ffffff;">Options Explained:</span></h2>
+<p>
+</div>
+<!-- /wp:freeform -->
+
+<!-- wp:freeform -->
+<div class="dtg-74115-6 vc_custom_1734991158817">
+<span style="color: #ffffff;">All selection tools have modifier keys to add to or take away from an existing selected area. Hold the SHIFT key to add to a selection, and hold the CONTROL key to take away from a selected area. Click the mouse outside a selected area to deselect.</span></p>
+<p><span style="color: #ffffff;">The feather option adds a softened edge to a selection. The maximum range is 99 pixels. Feather settings can be changed before or after a selection is made.</span></p>
+<p><span style="color: #ffffff;">Click the tool icon to close the options window.</span>
+</div>
+<!-- /wp:freeform -->
+
+<!-- wp:image {"id":48830} -->
+<figure class="wp-block-image size-full"><img src="https://solutionsforscreenprintersv1.kinsta.cloud/wp-content/uploads/2021/11/selection_modification-1.gif" class="wp-image-48830"/></figure>
+<!-- /wp:image -->
+
+</div>
+<!-- /wp:column -->
+</div>
+<!-- /wp:columns -->
+
+</div>
+<!-- /wp:group -->
+
+<!-- wp:paragraph -->
+<p></p></p>
+<!-- /wp:paragraph -->
+

@@ -3,7 +3,15 @@
     "allow": [
       "Bash(/Users/ridwanarifandi/DevKinsta/public/solutionsforscreenprintersv1/wp-content/plugins/divi-to-gutenberg-converter/includes/converters/class-converter-base.php:*)",
       "Bash(ls:*)",
-      "Bash(php -r:*)"
+      "Bash(php -r:*)",
+      "Bash(grep -l \"wpb_content_element\\\\|widget\\\\|vc_wp\" /Users/ridwanarifandi/DevKinsta/public/solutionsforscreenprintersv1/wp-content/plugins/js_composer_theme/assets/less/shortcodes/*.less)",
+      "Bash(grep -n \"@vc_element_margin_bottom\\\\|@vc_margin_bottom_gold\" /Users/ridwanarifandi/DevKinsta/public/solutionsforscreenprintersv1/wp-content/plugins/js_composer_theme/assets/less/lib/*.less)",
+      "Bash(python3 -c \":*)",
+      "WebFetch(domain:solutionsforscreenprinters.com)",
+      "Bash(python3 -c \"import sys,urllib.parse; print\\(urllib.parse.unquote\\(sys.stdin.read\\(\\)\\)\\)\")",
+      "Bash(grep -l \"mk-imagebox\\\\|mk-process-steps\" /Users/ridwanarifandi/DevKinsta/public/solutionsforscreenprintersv1/wp-content/plugins/jupiter-donut/assets/css/*.css)",
+      "Bash(grep -l \"Template Name:\" /Users/ridwanarifandi/DevKinsta/public/solutionsforscreenprintersv1/wp-content/themes/jupiter-child/*.php)",
+      "Bash(wp --path=/Users/ridwanarifandi/DevKinsta/public/solutionsforscreenprintersv1 post-type list --format=table)"
     ]
   }
 }

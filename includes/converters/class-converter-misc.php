@@ -21,6 +21,7 @@ class DTG_Converter_Misc extends DTG_Converter_Base {
 		'mk_custom_box',
 		'mk_header',
 		'mk_testimonials',
+		'vc_wp_custommenu',
 	];
 
 	public function can_convert( $tag ) {

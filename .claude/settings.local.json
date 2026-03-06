@@ -11,7 +11,8 @@
       "Bash(python3 -c \"import sys,urllib.parse; print\\(urllib.parse.unquote\\(sys.stdin.read\\(\\)\\)\\)\")",
       "Bash(grep -l \"mk-imagebox\\\\|mk-process-steps\" /Users/ridwanarifandi/DevKinsta/public/solutionsforscreenprintersv1/wp-content/plugins/jupiter-donut/assets/css/*.css)",
       "Bash(grep -l \"Template Name:\" /Users/ridwanarifandi/DevKinsta/public/solutionsforscreenprintersv1/wp-content/themes/jupiter-child/*.php)",
-      "Bash(wp --path=/Users/ridwanarifandi/DevKinsta/public/solutionsforscreenprintersv1 post-type list --format=table)"
+      "Bash(wp --path=/Users/ridwanarifandi/DevKinsta/public/solutionsforscreenprintersv1 post-type list --format=table)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:v for k,v in d.items\\(\\) if ''monitor'' in k.lower\\(\\)}, indent=2\\)\\)\")"
     ]
   }
 }

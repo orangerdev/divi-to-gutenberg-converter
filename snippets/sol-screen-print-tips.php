@@ -530,7 +530,13 @@ class SOL_Widget_Screen_Print_Tip_Categories extends WP_Widget {
 /* ================================================================
  * 7. Register Widgets
  * ============================================================== */
-add_action( 'widgets_init', function () {
+$sol_register_widgets = function () {
 	register_widget( 'SOL_Widget_Recent_Screen_Print_Tips' );
 	register_widget( 'SOL_Widget_Screen_Print_Tip_Categories' );
-} );
+};
+
+if ( did_action( 'widgets_init' ) ) {
+	$sol_register_widgets();
+} else {
+	add_action( 'widgets_init', $sol_register_widgets );
+}
